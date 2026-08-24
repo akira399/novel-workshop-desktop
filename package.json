@@ -12,6 +12,7 @@
     "verify": "pnpm typecheck && pnpm test"
   },
   "devDependencies": {
+    "@types/node": "^22.10.0",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

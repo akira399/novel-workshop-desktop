@@ -6,7 +6,7 @@ import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import { join, resolve, extname } from 'node:path'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
+
 import { WorkspaceService } from './workspace-service.ts'
 import { ModelService } from './model-service.ts'
 import { AgentService } from './agent-service.ts'
@@ -66,6 +66,9 @@ function createWindow(): void {
   })
 
   mainWindow.on('ready-to-show', () => mainWindow?.show())
+  mainWindow.on('closed', () => {
+    mainWindow = null
+  })
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('https:') || url.startsWith('http:')) void shell.openExternal(url)
     return { action: 'deny' }

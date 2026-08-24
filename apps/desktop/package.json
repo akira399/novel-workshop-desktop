@@ -1,6 +1,6 @@
 {
   "name": "@dafuyu/desktop",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "main": "out/main/index.js",
@@ -17,6 +17,7 @@
     "@dafuyu/shared": "workspace:*",
     "docx": "catalog:",
     "epub-gen": "catalog:",
+    "electron-updater": "6.6.2",
     "jszip": "catalog:",
     "pdfjs-dist": "catalog:",
     "react": "catalog:",
@@ -31,7 +32,6 @@
     "@vitejs/plugin-react": "^4.3.0",
     "electron": "catalog:",
     "electron-builder": "catalog:",
-    "electron-updater": "catalog:",
     "electron-vite": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:"
