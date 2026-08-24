@@ -5,7 +5,16 @@
  * 新增命令先改 CommandMap，再实现 Main 与 Preload。
  */
 import type { Book, BookSummary, Chapter } from '@dafuyu/core/novel'
-import type { LoreEntry, LoreGroup, PluginError, PromptTemplate } from '@dafuyu/core/types'
+import type { LoreEntry, LoreGroup, PluginError, PromptTemplate, ChapterStats } from '@dafuyu/core/types'
+import type { AuditEvent, PhaseId } from '@dafuyu/core/workflow'
+import type { ContextPacket } from '@dafuyu/core/context'
+import type { Golden3Report } from '@dafuyu/core/diagnose'
+import type { ValidationReport } from '@dafuyu/core/validation'
+import type { ConsistencyAuditReport } from '@dafuyu/core/consistency'
+import type { PolishSuggestion } from '@dafuyu/core/polish'
+import type { WizardState } from '@dafuyu/core/guide'
+import type { Foreshadow, GlossaryTerm, Idea } from '@dafuyu/core/auxiliary'
+import type { ImportResult } from '@dafuyu/core/importer'
 
 export const CONTRACTS_VERSION = '0.1.0'
 
@@ -67,6 +76,27 @@ export interface ProjectPhaseArtifact {
   content: string | null
 }
 
+/** 本地库条目（素材/技能）。 */
+export interface LibraryEntry {
+  id: string
+  kind: 'material' | 'skill'
+  title: string
+  content: string
+  tags: string[]
+  /** 绑定到哪些作品 */
+  bookIds: string[]
+  createdAt: string
+  updatedAt: string
+}
+
+/** WebDAV 云同步配置（密钥仅存主进程 settings）。 */
+export interface SyncConfig {
+  url: string
+  username: string
+  password: string
+  remotePath?: string
+}
+
 // ─────────────────────────── 润色/诊断（桌面复用） ───────────────────────────
 
 export interface PolishRequest {
@@ -126,15 +156,75 @@ export interface CommandMap {
   'projects:get': { request: { id: string }; response: Book }
   'projects:delete': { request: { id: string; keepChapters: boolean }; response: { deleted: boolean; keptChapters: boolean } }
   'projects:listArtifacts': { request: { id: string }; response: ProjectPhaseArtifact[] }
+  'projects:clone': { request: { sourceId: string; title?: string; genre?: string }; response: Book }
+  'projects:phase': { request: { projectId: string; phase?: PhaseId }; response: Book }
+  'projects:commit': { request: { projectId: string; phase: PhaseId; artifact: string; errorCount?: number; warningCount?: number; passed?: boolean }; response: Book }
+  'projects:override': { request: { projectId: string; phase: PhaseId; action: 'force' | 'reopen' | 'skip' | 'rollback' }; response: Book }
+  'projects:audit': { request: { projectId: string }; response: AuditEvent[] }
+  'projects:stats': { request: { projectId: string }; response: { id: string; title: string; genre: string; status: Book['status']; currentPhase: PhaseId; stats: Book['stats']; phases: Book['phases'] } }
+  'projects:importText': { request: { text: string; title?: string; genre?: string; fileName?: string }; response: ImportResult }
   'chapters:list': { request: { projectId: string }; response: ChapterListItem[] }
   'chapters:get': { request: { projectId: string; chapterNo: number }; response: ChapterWithText | null }
   'chapters:save': { request: { projectId: string; chapterNo: number; title: string; text: string; brief?: string }; response: Chapter }
   'chapters:stats': { request: { projectId: string; chapterNo: number }; response: ChapterStatsBrief | null }
+  'chapters:assemble': { request: { projectId: string; chapterNo: number; brief?: string }; response: ContextPacket }
+  'chapters:validate': { request: { projectId: string; chapterNo: number; title: string; text: string; brief?: string }; response: ValidationReport }
+  'chapters:diagnose': { request: { projectId: string; chapterStart: number; count?: number }; response: Golden3Report }
+  'chapters:wordcount': { request: { text: string; min?: number; max?: number; useCjk?: boolean }; response: ChapterStats }
+  'chapters:export': { request: { projectId: string; format: 'txt' | 'markdown' | 'platform'; authorNotes?: string; splitVolumes?: boolean }; response: { fileName: string; content: string } }
+  'chapters:exportToFile': { request: { projectId: string; format: 'txt' | 'markdown' | 'platform'; authorNotes?: string; splitVolumes?: boolean }; response: { path: string } }
+  'export:file': { request: { projectId: string; format: 'epub' | 'pdf' | 'docx'; path?: string }; response: { path: string } }
+  'polish:split': { request: { original: string; polished: string }; response: PolishSuggestion[] }
+  'polish:apply': { request: { original: string; suggestions: PolishSuggestion[] }; response: string }
+  'polish:aiTasteScan': { request: { text: string }; response: import('@dafuyu/core/polish').AiTasteReport }
   'lorebook:list': { request: { bookId?: string }; response: LorebookSnapshot }
   'lorebook:saveEntry': { request: { entry: LoreEntry }; response: LoreEntry }
   'lorebook:deleteEntry': { request: { id: string }; response: void }
   'lorebook:importJson': { request: { content: string; bookId?: string }; response: { imported: number; warnings: string[] } }
+  'lorebook:listGroups': { request: void; response: LoreGroup[] }
+  'lorebook:createGroup': { request: { name: string; entry_ids?: string[]; book_ids?: string[]; enabled?: boolean }; response: LoreGroup }
+  'lorebook:updateGroup': { request: import('@dafuyu/core/lorebook').UpdateGroupParams; response: LoreGroup }
+  'lorebook:deleteGroup': { request: { id: string; deleteEntries?: boolean }; response: { removedGroup: LoreGroup; removedEntries: LoreEntry[] } }
+  'lorebook:moveEntry': { request: { entryId: string; targetGroupId?: string }; response: { removedFrom: string[]; targetGroup: LoreGroup | null } }
   'prompts:list': { request: void; response: PromptTemplate[] }
+  'extras:foreshadows': { request: { projectId: string }; response: Foreshadow[] }
+  'extras:plantForeshadow': { request: { projectId: string; content: string; plantChapter: number; plannedRevealChapter?: number; related?: string }; response: Foreshadow }
+  'extras:revealForeshadow': { request: { projectId: string; id: string; chapterNo: number }; response: Foreshadow }
+  'extras:dropForeshadow': { request: { projectId: string; id: string }; response: Foreshadow }
+  'extras:glossary': { request: { projectId: string }; response: GlossaryTerm[] }
+  'extras:addGlossary': { request: { projectId: string; term: string; definition: string; category?: string }; response: GlossaryTerm }
+  'extras:extractGlossary': { request: { text: string }; response: string[] }
+  'extras:ideas': { request: { projectId: string; query?: string }; response: Idea[] }
+  'extras:addIdea': { request: { projectId: string; content: string; tags?: string[] }; response: Idea }
+  'extras:ledger': { request: { projectId: string; entity?: string }; response: import('@dafuyu/core/consistency').LedgerEntry[] }
+  'extras:timeline': { request: { projectId: string }; response: import('@dafuyu/core/consistency').TimelineEvent[] }
+  'extras:recordTimeline': { request: { projectId: string; chapterNo: number; bookTime: string; event: string }; response: import('@dafuyu/core/consistency').TimelineEvent }
+  'extras:consistencyAudit': { request: { projectId: string }; response: ConsistencyAuditReport }
+  'guide:parseIntent': { request: { text: string }; response: import('@dafuyu/core/guide').IntentAction | null }
+  'guide:wizardStatus': { request: { projectId: string }; response: WizardState }
+  'guide:wizardAction': { request: { projectId: string; action: 'commit' | 'next' | 'skip'; step?: WizardState['step']; artifact?: string }; response: { wizard: WizardState; nextStep?: WizardState['step'] | null } }
+  'library:list': { request: { kind?: 'material' | 'skill'; query?: string }; response: LibraryEntry[] }
+  'sync:status': { request: void; response: { configured: boolean; url?: string; remotePath?: string; lastSyncAt?: string } }
+  'sync:saveConfig': { request: { config: SyncConfig }; response: void }
+  'sync:test': { request: void; response: { ok: boolean; message: string } }
+  'sync:push': { request: void; response: { message: string } }
+  'sync:pull': { request: void; response: { message: string } }
+  'reader:open': { request: void; response: { path: string; ext: string; text: string | null; openedExternal: boolean } }
+  'update:check': { request: void; response: { status: 'checking' | 'available' | 'not-available' | 'error'; version?: string; message?: string } }
+  'update:download': { request: void; response: { started: boolean; message?: string } }
+  'library:save': { request: { entry: LibraryEntry }; response: LibraryEntry }
+  'library:delete': { request: { id: string }; response: void }
+  'models:list': { request: void; response: ModelProfile[] }
+  'models:save': { request: { profile: ModelProfile }; response: ModelProfile }
+  'models:delete': { request: { id: string }; response: void }
+  'models:test': { request: { id: string }; response: { ok: boolean; message: string; latencyMs: number } }
+  'agent:complete': { request: { profileId?: string; messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>; temperature?: number; maxTokens?: number }; response: { text: string; model: string; provider: string } }
+  'agent:writeChapter': { request: { projectId: string; chapterNo: number; brief?: string }; response: { text: string; model: string } }
+  'agent:polish': { request: { projectId: string; chapterNo: number; text?: string; instruction?: string }; response: { suggestions: PolishSuggestion[]; polished: string; model: string } }
+  'agent:depolish': { request: { text: string }; response: { text: string; model: string } }
+  'agent:styleConvert': { request: { projectId: string; chapterNo: number; styleId: string }; response: { original: string; revised: string; model: string } }
+  'agent:revise': { request: { projectId: string; chapterNo: number; mode: 'proofread' | 'rhythm' | 'style' }; response: { original: string; revised: string; mode: 'proofread' | 'rhythm' | 'style'; wordDelta: number; changeRatio: number; changed: boolean; model: string } }
+  'agent:applyAdvice': { request: { text: string; advice: string }; response: { revised: string; model: string } }
   'settings:get': { request: void; response: AppSettings }
   'settings:set': { request: { settings: AppSettings }; response: AppSettings }
 }

@@ -15,11 +15,12 @@ catalog:
   zod: "4.4.3"
   pdfjs-dist: "6.1.200"
   jszip: "3.10.1"
-  epub-gen: "0.1.1"
+  epub-gen: "0.1.0"
   docx: "9.5.1"
   webdav: "5.7.1"
 
 allowBuilds:
+  ejs: true
   electron: true
   electron-winstaller: true
   esbuild: true

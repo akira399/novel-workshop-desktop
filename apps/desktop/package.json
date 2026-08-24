@@ -15,8 +15,13 @@
     "@dafuyu/contracts": "workspace:*",
     "@dafuyu/core": "workspace:*",
     "@dafuyu/shared": "workspace:*",
+    "docx": "catalog:",
+    "epub-gen": "catalog:",
+    "jszip": "catalog:",
+    "pdfjs-dist": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
+    "webdav": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
