@@ -128,6 +128,15 @@ export function App(): JSX.Element {
     })
   }, [run, refreshWorkspace])
 
+  const importDshData = useCallback(() => {
+    void run(async () => {
+      const result = await call('workspace:importDshData', {})
+      if (!result.targetPath) return
+      window.alert(`迁移完成：${result.projects} 个项目，${result.loreEntries} 条世界书 → ${result.targetPath}`)
+      await refreshWorkspace()
+    })
+  }, [run, refreshWorkspace])
+
   const createProject = useCallback((title: string, genre: string) => {
     void run(async () => {
       const book = await call('projects:create', { title, genre })
@@ -375,6 +384,7 @@ export function App(): JSX.Element {
           <button onClick={chooseWorkspace} disabled={state.busy}>选择工作区</button>
           <button onClick={openSettings} disabled={state.busy}>模型设置</button>
           <button onClick={openReader} disabled={state.busy}>本地阅读</button>
+          <button onClick={importDshData} disabled={state.busy}>迁移 DSH 数据</button>
         </div>
       </header>
 

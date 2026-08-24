@@ -151,6 +151,7 @@ export interface CommandMap {
   'workspace:get': { request: void; response: WorkspaceInfo | null }
   'workspace:choose': { request: void; response: string | null }
   'workspace:set': { request: { path: string }; response: WorkspaceInfo }
+  'workspace:importDshData': { request: { sourcePath?: string }; response: { projects: number; loreEntries: number; targetPath: string } }
   'projects:list': { request: void; response: BookSummary[] }
   'projects:create': { request: { title: string; genre: string }; response: Book }
   'projects:get': { request: { id: string }; response: Book }
