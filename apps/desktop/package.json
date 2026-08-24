@@ -1,0 +1,34 @@
+{
+  "name": "@dafuyu/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "out/main/index.js",
+  "description": "大肥鱼的小说工坊 — 独立 Windows 桌面版",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "package:win": "pnpm build && electron-builder --win"
+  },
+  "dependencies": {
+    "@dafuyu/contracts": "workspace:*",
+    "@dafuyu/core": "workspace:*",
+    "@dafuyu/shared": "workspace:*",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "electron": "catalog:",
+    "electron-builder": "catalog:",
+    "electron-updater": "catalog:",
+    "electron-vite": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  }
+}

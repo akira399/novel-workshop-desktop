@@ -1,0 +1,38 @@
+appId: com.dafuyu.novel-workshop
+productName: 大肥鱼的小说工坊
+copyright: Copyright © 2025 akira399
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - out/**
+  - package.json
+
+extraResources:
+  - from: ../../resources
+    to: resources
+    filter:
+      - "**/*"
+
+asar: true
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: 大肥鱼的小说工坊
+  artifactName: ${productName}-${version}-win-x64.${ext}
+
+publish:
+  provider: github
+  owner: akira399
+  repo: novel-workshop-desktop

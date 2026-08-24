@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320" width="1200" height="320" role="img" aria-label="大肥鱼的小说工坊 — DSH 网络小说创作插件封面">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#243A61"/>
+      <stop offset="0.5" stop-color="#3D5D89"/>
+      <stop offset="1" stop-color="#6DC5F2"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 背景 -->
+  <rect x="0" y="0" width="1200" height="320" fill="url(#bg)"/>
+
+  <!-- 背景波浪装饰 -->
+  <path d="M 0 270 Q 150 232 300 270 T 600 270 T 900 270 T 1200 270 V 320 H 0 Z" fill="#1E3156" opacity="0.45"/>
+  <path d="M 0 295 Q 160 262 320 295 T 640 295 T 960 295 T 1200 295 V 320 H 0 Z" fill="#182A4C" opacity="0.5"/>
+
+  <!-- 浮游气泡点缀 -->
+  <circle cx="150" cy="90" r="13" fill="none" stroke="#CFE8FF" stroke-width="5" opacity="0.7"/>
+  <circle cx="178" cy="58" r="7" fill="#CFE8FF" opacity="0.6"/>
+  <circle cx="1045" cy="100" r="9" fill="none" stroke="#CFE8FF" stroke-width="4" opacity="0.6"/>
+  <circle cx="1030" cy="55" r="6" fill="#CFE8FF" opacity="0.5"/>
+  <circle cx="560" cy="60" r="7" fill="none" stroke="#CFE8FF" stroke-width="4" opacity="0.5"/>
+
+  <!-- 品牌文字 -->
+  <text x="600" y="150" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei','Noto Sans CJK SC',sans-serif" font-size="78" font-weight="700" fill="#FFFFFF" letter-spacing="2">大肥鱼的小说工坊</text>
+  <text x="600" y="216" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei','Noto Sans CJK SC',sans-serif" font-size="30" fill="#CFE8FF" letter-spacing="1">DeepSeek Harness · 网络小说创作插件</text>
+  <text x="600" y="262" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei','Noto Sans CJK SC',sans-serif" font-size="19" fill="#9FCBEC" letter-spacing="1">九阶段门禁式创作 · 世界书设定注入 · AI 一键润色 · 百万字一致性</text>
+</svg>

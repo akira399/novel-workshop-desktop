@@ -1,0 +1,38 @@
+{
+  "name": "@dafuyu/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./types": "./src/types.ts",
+    "./util": "./src/util.ts",
+    "./genres": "./src/genres.ts",
+    "./write-prompt": "./src/write-prompt.ts",
+    "./drawer-size": "./src/drawer-size.ts",
+    "./auxiliary": "./src/auxiliary/index.ts",
+    "./consistency": "./src/consistency/index.ts",
+    "./context": "./src/context/index.ts",
+    "./diagnose": "./src/diagnose/index.ts",
+    "./export": "./src/export/index.ts",
+    "./guide": "./src/guide/index.ts",
+    "./importer": "./src/importer/index.ts",
+    "./lorebook": "./src/lorebook/index.ts",
+    "./novel": "./src/novel/index.ts",
+    "./polish": "./src/polish/index.ts",
+    "./prompts": "./src/prompts/index.ts",
+    "./revision": "./src/revision/index.ts",
+    "./stats": "./src/stats/index.ts",
+    "./validation": "./src/validation/index.ts",
+    "./variables": "./src/variables/index.ts",
+    "./workflow": "./src/workflow/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run --root ../..",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
