@@ -3,7 +3,9 @@
  * 职责：创建窗口、安全 IPC、WorkspaceService、工作区选择、自更新挂载点。
  */
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
-import { autoUpdater } from 'electron-updater'
+import electronUpdater from 'electron-updater'
+
+const { autoUpdater } = electronUpdater
 import { join, resolve, extname } from 'node:path'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 
