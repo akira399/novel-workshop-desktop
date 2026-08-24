@@ -89,3 +89,8 @@ button:disabled { opacity: .5; cursor: default; }
 .reader-modal { width: 820px; }
 .reader-body { max-height: 70vh; overflow: auto; }
 .reader-body pre { white-space: pre-wrap; word-break: break-word; font-family: "Microsoft YaHei", serif; font-size: 15px; line-height: 1.9; }
+
+.prompt-modal, .alert-modal { width: 480px; }
+.prompt-input { width: 100%; padding: 8px 10px; font-size: 14px; border: 1px solid var(--border); border-radius: 6px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.alert-body { white-space: pre-wrap; word-break: break-word; }

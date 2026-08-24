@@ -29,6 +29,8 @@ interface UiState {
   modelDraft: ModelProfile
   reader: { path: string; ext: string; text: string | null } | null
   library: LibraryEntry[]
+  promptRequest: { title: string; defaultValue: string; resolve: (value: string | null) => void } | null
+  alertRequest: { title: string; message: string; resolve: () => void } | null
 }
 
 const emptyModel: ModelProfile = {
@@ -63,6 +65,8 @@ const initialUi: UiState = {
   modelDraft: emptyModel,
   reader: null,
   library: [],
+  promptRequest: null,
+  alertRequest: null,
 }
 
 async function call<K extends keyof import('@dafuyu/contracts').CommandMap>(
@@ -92,6 +96,14 @@ export function App(): JSX.Element {
       patch({ busy: false })
     }
   }, [patch])
+
+  const askPrompt = useCallback((title: string, defaultValue = '') => new Promise<string | null>((resolve) => {
+    patch({ promptRequest: { title, defaultValue, resolve } })
+  }), [patch])
+
+  const showAlert = useCallback((message: string, title = '提示') => new Promise<void>((resolve) => {
+    patch({ alertRequest: { title, message, resolve } })
+  }), [patch])
 
   const refreshWorkspace = useCallback(async () => {
     const [info, workspace, settings, projects, library] = await Promise.all([
@@ -125,15 +137,6 @@ export function App(): JSX.Element {
         await refreshWorkspace()
         patch({ selectedProjectId: null, selectedChapterNo: null, chapter: null, chapters: [], lorebook: null })
       }
-    })
-  }, [run, refreshWorkspace])
-
-  const importDshData = useCallback(() => {
-    void run(async () => {
-      const result = await call('workspace:importDshData', {})
-      if (!result.targetPath) return
-      window.alert(`迁移完成：${result.projects} 个项目，${result.loreEntries} 条世界书 → ${result.targetPath}`)
-      await refreshWorkspace()
     })
   }, [run, refreshWorkspace])
 
@@ -223,13 +226,13 @@ export function App(): JSX.Element {
     }, '去 AI 味完成')
   }, [run, state.editorText, patch])
 
-  const styleConvertAI = useCallback(() => {
+  const styleConvertAI = useCallback(async () => {
     const projectId = state.selectedProjectId
     const chapterNo = state.selectedChapterNo
     if (!projectId || !chapterNo) return
-    const styleId = window.prompt('文风模板 id（如 style-xuanhuan / style-urban / style-scifi）', 'style-xuanhuan')
+    const styleId = await askPrompt('文风模板 id（如 style-xuanhuan / style-urban / style-scifi）', 'style-xuanhuan')
     if (!styleId) return
-    void run(async () => {
+    await run(async () => {
       const result = await call('agent:styleConvert', { projectId, chapterNo, styleId })
       patch({ editorText: result.revised })
     }, '文风转换完成')
@@ -242,7 +245,7 @@ export function App(): JSX.Element {
     void run(async () => {
       const report = await call('chapters:validate', { projectId, chapterNo, title: state.editorTitle, text: state.editorText })
       const summary = report.issues.map((i) => `[${i.level}] ${i.message}`).join('\n') || '校验通过，无问题'
-      window.alert(`校验结果：${report.passed ? '通过' : '未通过'}\n\n${summary}`)
+      await showAlert(`校验结果：${report.passed ? '通过' : '未通过'}\n\n${summary}`)
     })
   }, [run, state])
 
@@ -252,38 +255,38 @@ export function App(): JSX.Element {
     const start = state.selectedChapterNo ?? 1
     void run(async () => {
       const report = await call('chapters:diagnose', { projectId, chapterStart: start, count: 3 })
-      window.alert(`黄金三章诊断：${report.score}/100\n\n${report.issues.slice(0, 10).map((i) => `[${i.severity}] ${i.advice}`).join('\n')}`)
+      await showAlert(`黄金三章诊断：${report.score}/100\n\n${report.issues.slice(0, 10).map((i) => `[${i.severity}] ${i.advice}`).join('\n')}`)
     })
   }, [run, state.selectedProjectId, state.selectedChapterNo])
 
-  const exportAI = useCallback(() => {
+  const exportAI = useCallback(async () => {
     const projectId = state.selectedProjectId
     if (!projectId) return
-    const format = window.prompt('导出格式（txt / markdown / platform）', 'markdown')
+    const format = await askPrompt('导出格式（txt / markdown / platform）', 'markdown')
     if (!format || !['txt', 'markdown', 'platform'].includes(format)) return
-    void run(async () => {
+    await run(async () => {
       const result = await call('chapters:exportToFile', { projectId, format: format as 'txt' | 'markdown' | 'platform' })
-      if (result.path) window.alert(`已导出到：${result.path}`)
+      if (result.path) await showAlert(`已导出到：${result.path}`)
     })
   }, [run, state.selectedProjectId])
 
-  const exportRich = useCallback(() => {
+  const exportRich = useCallback(async () => {
     const projectId = state.selectedProjectId
     if (!projectId) return
-    const format = window.prompt('导出格式（epub / pdf / docx）', 'epub')
+    const format = await askPrompt('导出格式（epub / pdf / docx）', 'epub')
     if (!format || !['epub', 'pdf', 'docx'].includes(format)) return
-    void run(async () => {
+    await run(async () => {
       const result = await call('export:file', { projectId, format: format as 'epub' | 'pdf' | 'docx' })
-      if (result.path) window.alert(`已导出到：${result.path}`)
+      if (result.path) await showAlert(`已导出到：${result.path}`)
     })
   }, [run, state.selectedProjectId])
 
   const importText = useCallback(() => {
     void run(async () => {
-      const text = window.prompt('粘贴要导入的 txt/md 全文（可含章节标题）')
+      const text = await askPrompt('粘贴要导入的 txt/md 全文（可含章节标题）')
       if (!text) return
       const result = await call('projects:importText', { text, fileName: 'import.txt' })
-      window.alert(`导入完成：${result.title}，共 ${result.chapterCount} 章，${result.totalWords} 字`)
+      await showAlert(`导入完成：${result.title}，共 ${result.chapterCount} 章，${result.totalWords} 字`)
       await refreshWorkspace()
       await loadProject(result.bookId)
     })
@@ -294,7 +297,7 @@ export function App(): JSX.Element {
       const result = await call('reader:open', undefined)
       if (!result.path) return
       if (result.openedExternal) {
-        window.alert(`已用系统默认程序打开：${result.path}`)
+        await showAlert(`已用系统默认程序打开：${result.path}`)
         return
       }
       patch({ reader: { path: result.path, ext: result.ext, text: result.text } })
@@ -351,7 +354,7 @@ export function App(): JSX.Element {
       const saved = await call('models:save', { profile })
       const models = await call('models:list', undefined)
       patch({ models, modelDraft: emptyModel })
-      window.alert(`模型「${saved.name}」已保存`)
+      await showAlert(`模型「${saved.name}」已保存`)
     })
   }, [run, patch])
 
@@ -366,11 +369,13 @@ export function App(): JSX.Element {
   const testModel = useCallback((id: string) => {
     void run(async () => {
       const result = await call('models:test', { id })
-      window.alert(result.message)
+      await showAlert(result.message)
     })
   }, [run])
 
   const selectedBook = useMemo(() => state.projects.find((p) => p.id === state.selectedProjectId) ?? null, [state.projects, state.selectedProjectId])
+  const promptRequest = state.promptRequest
+  const alertRequest = state.alertRequest
 
   return (
     <div className="app">
@@ -384,7 +389,6 @@ export function App(): JSX.Element {
           <button onClick={chooseWorkspace} disabled={state.busy}>选择工作区</button>
           <button onClick={openSettings} disabled={state.busy}>模型设置</button>
           <button onClick={openReader} disabled={state.busy}>本地阅读</button>
-          <button onClick={importDshData} disabled={state.busy}>迁移 DSH 数据</button>
         </div>
       </header>
 
@@ -396,9 +400,9 @@ export function App(): JSX.Element {
           <div className="panel-title">
             作品库
             <span>
-              <button onClick={() => {
-                const title = window.prompt('新作品标题')
-                const genre = window.prompt('题材 id（如 fantasy/xianxia/urban）', 'fantasy')
+              <button onClick={async () => {
+                const title = await askPrompt('新作品标题')
+                const genre = await askPrompt('题材 id（如 fantasy/xianxia/urban）', 'fantasy')
                 if (title && genre) createProject(title, genre)
               }}>＋</button>
               <button onClick={importText}>导入</button>
@@ -477,10 +481,10 @@ export function App(): JSX.Element {
         <aside className="sidebar right">
           <div className="panel-title">
             本地库
-            <button onClick={() => {
-              const kind = window.prompt('类型（material / skill）', 'material')
-              const title = window.prompt('标题')
-              const content = window.prompt('内容')
+            <button onClick={async () => {
+              const kind = await askPrompt('类型（material / skill）', 'material')
+              const title = await askPrompt('标题')
+              const content = await askPrompt('内容')
               if (kind && title && content && (kind === 'material' || kind === 'skill')) {
                 saveLibraryEntry({
                   id: `lib_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
@@ -501,8 +505,8 @@ export function App(): JSX.Element {
                 <div className="lore-entry-head">
                   <strong>{entry.title}</strong>
                   <span>
-                    <button onClick={() => {
-                      const content = window.prompt('内容', entry.content)
+                    <button onClick={async () => {
+                      const content = await askPrompt('内容', entry.content)
                       if (content !== null) saveLibraryEntry({ ...entry, content })
                     }}>改</button>
                     <button onClick={() => deleteLibraryEntry(entry.id)}>删</button>
@@ -521,8 +525,8 @@ export function App(): JSX.Element {
                   <div className="lore-entry-head">
                     <strong>{entry.name}</strong>
                     <span>
-                      <button onClick={() => {
-                        const content = window.prompt('条目内容', entry.content)
+                      <button onClick={async () => {
+                        const content = await askPrompt('条目内容', entry.content)
                         if (content !== null) saveLoreEntry({ ...entry, content })
                       }}>改</button>
                       <button onClick={() => deleteLoreEntry(entry.id)}>删</button>
@@ -534,9 +538,9 @@ export function App(): JSX.Element {
               {state.lorebook.entries.length === 0 && <div className="empty">暂无世界书条目</div>}
               <button
                 className="add-lore"
-                onClick={() => {
-                  const name = window.prompt('条目名称')
-                  const content = window.prompt('条目内容')
+                onClick={async () => {
+                  const name = await askPrompt('条目名称')
+                  const content = await askPrompt('条目内容')
                   if (name && content && state.selectedProjectId) {
                     saveLoreEntry({
                       id: `wb_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
@@ -649,6 +653,80 @@ export function App(): JSX.Element {
           </div>
         </div>
       )}
+
+      {promptRequest && (
+        <PromptModal
+          title={promptRequest.title}
+          defaultValue={promptRequest.defaultValue}
+          onConfirm={(value) => {
+            promptRequest.resolve(value)
+            patch({ promptRequest: null })
+          }}
+          onCancel={() => {
+            promptRequest.resolve(null)
+            patch({ promptRequest: null })
+          }}
+        />
+      )}
+
+      {alertRequest && (
+        <AlertModal
+          title={alertRequest.title}
+          message={alertRequest.message}
+          onClose={() => {
+            alertRequest.resolve()
+            patch({ alertRequest: null })
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function PromptModal(props: { title: string; defaultValue: string; onConfirm: (value: string) => void; onCancel: () => void }): JSX.Element {
+  const [value, setValue] = useState(props.defaultValue)
+  return (
+    <div className="modal-mask" onClick={props.onCancel}>
+      <div className="modal prompt-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <strong>{props.title}</strong>
+          <button onClick={props.onCancel}>取消</button>
+        </div>
+        <div className="modal-body">
+          <input
+            className="prompt-input"
+            autoFocus
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') props.onConfirm(value)
+              if (e.key === 'Escape') props.onCancel()
+            }}
+          />
+          <div className="modal-actions">
+            <button onClick={() => props.onConfirm(value)}>确定</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AlertModal(props: { title: string; message: string; onClose: () => void }): JSX.Element {
+  return (
+    <div className="modal-mask" onClick={props.onClose}>
+      <div className="modal alert-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <strong>{props.title}</strong>
+          <button onClick={props.onClose}>关闭</button>
+        </div>
+        <div className="modal-body alert-body">
+          <pre>{props.message}</pre>
+        </div>
+        <div className="modal-actions">
+          <button onClick={props.onClose}>确定</button>
+        </div>
+      </div>
     </div>
   )
 }

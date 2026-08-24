@@ -117,20 +117,6 @@ async function dispatch<K extends CommandName>(command: K, payload: CommandReque
         const info = await ws!.setWorkspace(req.path)
         return { ok: true, value: info as CommandResponse<K> }
       }
-      case 'workspace:importDshData': {
-        const req = payload as { sourcePath?: string }
-        let sourcePath = req.sourcePath
-        if (!sourcePath) {
-          if (!mainWindow) return { ok: false, error: { code: 'IO_FAILURE', message: '主窗口未就绪' } }
-          const result = await dialog.showOpenDialog(mainWindow, {
-            title: '选择 DSH 插件数据目录（如 ~/.dsh/dsh-novel-writer）',
-            properties: ['openDirectory'],
-          })
-          if (result.canceled || result.filePaths.length === 0) return { ok: true, value: { projects: 0, loreEntries: 0, targetPath: '' } as CommandResponse<K> }
-          sourcePath = result.filePaths[0]!
-        }
-        return { ok: true, value: (await ws!.importDshData(sourcePath)) as CommandResponse<K> }
-      }
       case 'projects:list':
         return { ok: true, value: (await ws!.listProjects()) as CommandResponse<K> }
       case 'projects:create': {

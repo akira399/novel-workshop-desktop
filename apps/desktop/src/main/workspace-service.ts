@@ -543,18 +543,6 @@ export class WorkspaceService {
     await this.writeLibrary(entries.filter((e) => e.id !== id))
   }
 
-  async importDshData(sourcePath: string): Promise<{ projects: number; loreEntries: number; targetPath: string }> {
-    if (!this.workspacePath) throw new Error('请先选择工作区')
-    const { cp, readdir } = await import('node:fs/promises')
-    const srcProjects = join(sourcePath, 'projects')
-    const srcLore = join(sourcePath, 'lorebook')
-    await cp(srcProjects, join(this.workspacePath, 'projects'), { recursive: true, force: true }).catch(() => undefined)
-    await cp(srcLore, join(this.workspacePath, 'lorebook'), { recursive: true, force: true }).catch(() => undefined)
-    const projects = await readdir(join(this.workspacePath, 'projects')).catch(() => [] as string[])
-    const loreEntries = await this.loreStore?.readEntries().catch(() => []) ?? []
-    return { projects: projects.filter((p) => /^bk_/i.test(p)).length, loreEntries: loreEntries.length, targetPath: this.workspacePath }
-  }
-
   parseIntent(text: string) {
     return parseIntent(text)
   }
