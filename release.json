@@ -1,0 +1,1 @@
+{"tag_name":"v0.1.0","target_commitish":"master","name":"大肥鱼的小说工坊 v0.1.0","body":"独立 Windows 桌面版首个发布版本。\n\n包含：\n- 完整复用 dsh-novel-writer 核心（九阶段/世界书/润色/诊断/一致性/修订/导入/导出）\n- 本地库/离线阅读/EPUB·PDF·DOCX 导出\n- 任意 AI 端点接入（OpenAI 兼容/Anthropic/Gemini）\n- WebDAV 云同步\n- 自动更新\n\n安装包：大肥鱼的小说工坊-0.1.0-win-x64.exe","draft":false,"prerelease":false}
