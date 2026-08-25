@@ -44,14 +44,18 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-.app { display: flex; flex-direction: column; height: 100%; }
+.app {
+  display: flex; flex-direction: column; height: 100%;
+  padding: 8px; gap: 8px;
+  background: var(--bg);
+}
 
 /* ── 顶栏 ── */
 .topbar {
   display: flex; align-items: center; justify-content: space-between;
   padding: 0 20px; background: var(--surface); height: 52px; flex: 0 0 auto;
-  border-bottom: 1px solid var(--border);
-  box-shadow: var(--shadow-sm);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
   position: relative; z-index: 10;
 }
 .brand { display: flex; align-items: center; gap: 10px; }
@@ -109,26 +113,30 @@ button:disabled:hover { background: var(--surface); border-color: var(--border);
 .error-bar {
   background: var(--danger-soft); color: var(--danger);
   padding: 8px 20px; font-size: 12.5px; font-weight: 500;
-  border-bottom: 1px solid #fecaca;
+  border-radius: var(--radius-md);
 }
 .notice-bar {
   background: var(--success-soft); color: var(--success);
   padding: 8px 20px; font-size: 12.5px; font-weight: 500;
-  border-bottom: 1px solid #bbf7d0;
+  border-radius: var(--radius-md);
 }
 
 /* ── 主布局 ── */
-.layout { display: flex; flex: 1; min-height: 0; }
+.layout {
+  display: flex; flex: 1; min-height: 0;
+  gap: 8px;
+}
 
 /* ── 侧边栏 ── */
 .sidebar {
   width: 300px; background: var(--surface);
-  border-right: 1px solid var(--border);
   display: flex; flex-direction: column; overflow: hidden;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
 }
 .sidebar-head {
   display: flex; align-items: center; gap: 4px;
-  padding: 10px 12px; border-bottom: 1px solid var(--border);
+  padding: 10px 12px;
   flex: 0 0 auto;
 }
 .sidebar-head .spacer { flex: 1; }
@@ -204,7 +212,12 @@ button:disabled:hover { background: var(--surface); border-color: var(--border);
 }
 
 /* ── 编辑器 ── */
-.editor { flex: 1; display: flex; flex-direction: column; min-width: 0; background: var(--surface); }
+.editor {
+  flex: 1; display: flex; flex-direction: column; min-width: 0; background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
 .editor-toolbar {
   display: flex; align-items: center; gap: 5px;
   padding: 8px 16px; border-bottom: 1px solid var(--border);
@@ -283,8 +296,10 @@ button:disabled:hover { background: var(--surface); border-color: var(--border);
 /* ── 聊天栏 ── */
 .chat-bar {
   flex: 0 0 auto; height: 220px; display: flex; flex-direction: column;
-  border-top: 1px solid var(--border);
   background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
 }
 .chat-head {
   padding: 7px 20px; border-bottom: 1px solid var(--border);
