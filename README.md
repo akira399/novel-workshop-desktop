@@ -24,6 +24,26 @@ pnpm --filter @dafuyu/desktop dev
 pnpm --filter @dafuyu/desktop package:win
 ```
 
+## 快速测试（免安装）
+
+```bash
+pnpm quick
+```
+
+或手动：
+
+```bash
+pnpm --filter @dafuyu/desktop build:dir
+```
+
+然后双击：
+
+```
+apps/desktop/run-unpacked.bat
+```
+
+也可以直接运行 `apps/desktop/release/win-unpacked/大肥鱼的小说工坊.exe`，无需安装。
+
 ## 发布
 
 - Windows 安装包在 `apps/desktop/release/`

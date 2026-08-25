@@ -9,7 +9,9 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "package:win": "pnpm build && electron-builder --win"
+    "package:win": "pnpm build && electron-builder --win",
+    "build:dir": "electron-vite build && electron-builder --dir",
+    "quick": "electron-vite build && electron-builder --dir && cmd /c run-unpacked.bat"
   },
   "dependencies": {
     "@dafuyu/contracts": "workspace:*",

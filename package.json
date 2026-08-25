@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "pnpm --filter @dafuyu/desktop dev",
     "build": "pnpm --filter @dafuyu/desktop build",
+    "quick": "pnpm --filter @dafuyu/desktop quick",
     "test": "vitest run",
     "typecheck": "pnpm -r typecheck",
     "verify": "pnpm typecheck && pnpm test"
