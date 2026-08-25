@@ -62,7 +62,10 @@ body {
 .topbar button, .topbar input, .topbar select {
   -webkit-app-region: no-drag;
 }
-.brand { display: flex; align-items: center; gap: 10px; }
+.brand {
+  display: flex; align-items: center; gap: 10px;
+  -webkit-app-region: drag;
+}
 .brand strong {
   font-size: 15px; font-weight: 700; letter-spacing: -.02em;
   background: linear-gradient(135deg, #1c1917 0%, #44403c 100%);

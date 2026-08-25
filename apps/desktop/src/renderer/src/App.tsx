@@ -539,8 +539,11 @@ export function App(): JSX.Element {
   return (
     <div className="app">
       <header className="topbar">
+        <div className="brand">
+          <strong>大肥鱼的小说工坊</strong>
+          {state.info?.version && <span className="version">{state.info.version}</span>}
+        </div>
         <div className="topbar-drag" />
-        <div className="brand"><strong>大肥鱼的小说工坊</strong><span className="version">{state.info?.version ?? '…'}</span></div>
         <div className="top-actions">
           <span className="path">{state.workspace?.path ?? '未选择工作区'}</span>
           <button onClick={() => void run(async () => { const path = await call('workspace:choose', undefined); if (path) await refreshWorkspace() })}>选择工作区</button>
