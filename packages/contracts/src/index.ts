@@ -163,6 +163,7 @@ export interface CommandMap {
   'projects:audit': { request: { projectId: string }; response: AuditEvent[] }
   'projects:stats': { request: { projectId: string }; response: { id: string; title: string; genre: string; status: Book['status']; currentPhase: PhaseId; stats: Book['stats']; phases: Book['phases'] } }
   'projects:importText': { request: { text: string; title?: string; genre?: string; fileName?: string }; response: ImportResult }
+  'projects:importFile': { request: void; response: ImportResult }
   'chapters:list': { request: { projectId: string }; response: ChapterListItem[] }
   'chapters:get': { request: { projectId: string; chapterNo: number }; response: ChapterWithText | null }
   'chapters:save': { request: { projectId: string; chapterNo: number; title: string; text: string; brief?: string }; response: Chapter }

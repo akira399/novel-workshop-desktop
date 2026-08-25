@@ -170,6 +170,19 @@ async function dispatch<K extends CommandName>(command: K, payload: CommandReque
         const req = payload as { text: string; title?: string; genre?: string; fileName?: string }
         return { ok: true, value: (await ws!.importText(req.text, { title: req.title, genre: req.genre, fileName: req.fileName })) as CommandResponse<K> }
       }
+      case 'projects:importFile': {
+        if (!mainWindow) return { ok: false, error: { code: 'IO_FAILURE', message: '主窗口未就绪' } }
+        const result = await dialog.showOpenDialog(mainWindow, {
+          title: '导入本地书籍文件',
+          properties: ['openFile'],
+          filters: [{ name: '文本文件', extensions: ['txt', 'md', 'markdown'] }],
+        })
+        if (result.canceled || result.filePaths.length === 0) return { ok: true, value: null as CommandResponse<K> }
+        const filePath = result.filePaths[0]!
+        const fileName = filePath.split(/[\\/]/).at(-1) ?? 'import.txt'
+        const content = await readFile(filePath, 'utf8')
+        return { ok: true, value: (await ws!.importText(content, { fileName })) as CommandResponse<K> }
+      }
       case 'chapters:list': {
         const req = payload as { projectId: string }
         return { ok: true, value: (await ws!.listChapters(req.projectId)) as CommandResponse<K> }
