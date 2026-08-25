@@ -226,6 +226,36 @@ export class WorkspaceService {
     return { imported: result.imported_count, warnings: result.warnings }
   }
 
+  async exportLorebookSillyTavern(): Promise<{ content: string; count: number }> {
+    const entries = await this.requireLore().listEntries()
+    const payload = entries.map((entry, index) => ({
+      uid: index + 1,
+      key: entry.name,
+      keys: entry.keywords.length > 0 ? entry.keywords : [entry.name],
+      secondary_keys: [],
+      comment: entry.note ?? entry.name,
+      content: entry.content,
+      constant: entry.always_active,
+      selective: false,
+      insert_order: 100 - Math.min(100, Math.max(0, entry.priority)),
+      enabled: entry.enabled,
+      position: entry.inject_position === 'prepend' ? 0 : 1,
+      disable: false,
+    }))
+    return { content: JSON.stringify({ entries: payload }, null, 2), count: payload.length }
+  }
+
+  async importDemo(): Promise<{ bookId: string; imported: number }> {
+    const book = await this.requireNovel().createProject('青云问道', 'fantasy')
+    const dir = join(this.deps.resourcesDir, 'samples', 'demo-book', 'lorebook')
+    const entriesText = await readOptional(join(dir, 'entries.json'))
+    if (!entriesText) return { bookId: book.id, imported: 0 }
+    const parsed = JSON.parse(entriesText) as unknown
+    const list = Array.isArray(parsed) ? parsed : (parsed as { data?: unknown[] }).data ?? []
+    const result = await this.requireLore().importEntries({ content: JSON.stringify(list), book_id: book.id })
+    return { bookId: book.id, imported: result.imported_count }
+  }
+
   // ── 提示词 ──
 
   listPrompts(): Promise<PromptTemplate[]> {

@@ -183,6 +183,8 @@ async function dispatch<K extends CommandName>(command: K, payload: CommandReque
         const content = await readFile(filePath, 'utf8')
         return { ok: true, value: (await ws!.importText(content, { fileName })) as CommandResponse<K> }
       }
+      case 'projects:importDemo':
+        return { ok: true, value: (await ws!.importDemo()) as CommandResponse<K> }
       case 'chapters:list': {
         const req = payload as { projectId: string }
         return { ok: true, value: (await ws!.listChapters(req.projectId)) as CommandResponse<K> }
@@ -281,6 +283,8 @@ async function dispatch<K extends CommandName>(command: K, payload: CommandReque
         const req = payload as { content: string; bookId?: string }
         return { ok: true, value: (await ws!.importLorebookJson(req.content, req.bookId)) as CommandResponse<K> }
       }
+      case 'lorebook:exportSillyTavern':
+        return { ok: true, value: (await ws!.exportLorebookSillyTavern()) as CommandResponse<K> }
       case 'lorebook:listGroups':
         return { ok: true, value: (await ws!.listLorebookGroups()) as CommandResponse<K> }
       case 'lorebook:createGroup': {

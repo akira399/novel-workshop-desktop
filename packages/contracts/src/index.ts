@@ -164,6 +164,7 @@ export interface CommandMap {
   'projects:stats': { request: { projectId: string }; response: { id: string; title: string; genre: string; status: Book['status']; currentPhase: PhaseId; stats: Book['stats']; phases: Book['phases'] } }
   'projects:importText': { request: { text: string; title?: string; genre?: string; fileName?: string }; response: ImportResult }
   'projects:importFile': { request: void; response: ImportResult }
+  'projects:importDemo': { request: void; response: { bookId: string; imported: number } }
   'chapters:list': { request: { projectId: string }; response: ChapterListItem[] }
   'chapters:get': { request: { projectId: string; chapterNo: number }; response: ChapterWithText | null }
   'chapters:save': { request: { projectId: string; chapterNo: number; title: string; text: string; brief?: string }; response: Chapter }
@@ -182,6 +183,7 @@ export interface CommandMap {
   'lorebook:saveEntry': { request: { entry: LoreEntry }; response: LoreEntry }
   'lorebook:deleteEntry': { request: { id: string }; response: void }
   'lorebook:importJson': { request: { content: string; bookId?: string }; response: { imported: number; warnings: string[] } }
+  'lorebook:exportSillyTavern': { request: void; response: { content: string; count: number } }
   'lorebook:listGroups': { request: void; response: LoreGroup[] }
   'lorebook:createGroup': { request: { name: string; entry_ids?: string[]; book_ids?: string[]; enabled?: boolean }; response: LoreGroup }
   'lorebook:updateGroup': { request: import('@dafuyu/core/lorebook').UpdateGroupParams; response: LoreGroup }

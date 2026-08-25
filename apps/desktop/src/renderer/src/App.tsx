@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AppInfo, AppSettings, ChapterWithText, LibraryEntry, LorebookSnapshot, ModelProfile, WorkspaceInfo } from '@dafuyu/contracts'
 import type { BookSummary } from '@dafuyu/core/novel'
 import type { LoreEntry } from '@dafuyu/core/types'
+import { splitPolishSuggestions, applyPolishSuggestions } from '@dafuyu/core/polish'
+import type { PolishSuggestion } from '@dafuyu/core/polish'
 
 const GENRES = [
   ['fantasy', '玄幻'], ['xianxia', '仙侠'], ['wuxia', '武侠'], ['urban', '都市'], ['scifi', '科幻'],
@@ -61,6 +63,7 @@ interface UiState {
   chatBusy: boolean
   promptRequest: PromptRequest | null
   alertRequest: AlertRequest | null
+  polishPreview: { original: string; polished: string; suggestions: PolishSuggestion[] } | null
   error: string | null
   notice: string | null
   busy: boolean
@@ -72,7 +75,7 @@ const initialUi: UiState = {
   undoStack: [], redoStack: [], findOpen: false, findText: '', replaceText: '', fontSize: 16,
   view: 'projects', lorebook: null, library: [], models: [], modelDraft: emptyModel,
   showSettings: false, reader: null, chatMessages: [], chatInput: '', chatBusy: false,
-  promptRequest: null, alertRequest: null, error: null, notice: null, busy: false,
+  promptRequest: null, alertRequest: null, polishPreview: null, error: null, notice: null, busy: false,
 }
 
 async function call<K extends keyof import('@dafuyu/contracts').CommandMap>(
@@ -255,9 +258,56 @@ export function App(): JSX.Element {
     const text = state.editorText
     void run(async () => {
       const result = await call('agent:polish', { projectId, chapterNo, text })
+      const suggestions = splitPolishSuggestions(text, result.polished)
       setEditorText(result.polished)
-    }, '润色完成')
-  }, [run, state.selectedProjectId, state.selectedChapterNo, state.editorText, setEditorText])
+      patch({ polishPreview: { original: text, polished: result.polished, suggestions } })
+    }, '润色完成，可逐条采纳')
+  }, [run, state.selectedProjectId, state.selectedChapterNo, state.editorText, setEditorText, patch])
+
+  const togglePolish = useCallback((id: string) => {
+    setState((prev) => {
+      if (!prev.polishPreview) return prev
+      const suggestions = prev.polishPreview.suggestions.map((s) => (s.id === id ? { ...s, accepted: !s.accepted } : s))
+      return { ...prev, polishPreview: { ...prev.polishPreview, suggestions } }
+    })
+  }, [])
+
+  const acceptAllPolish = useCallback(() => {
+    setState((prev) => {
+      if (!prev.polishPreview) return prev
+      const suggestions = prev.polishPreview.suggestions.map((s) => (s.polished.length > 0 ? { ...s, accepted: true } : s))
+      return { ...prev, polishPreview: { ...prev.polishPreview, suggestions } }
+    })
+  }, [])
+
+  const rejectAllPolish = useCallback(() => {
+    setState((prev) => {
+      if (!prev.polishPreview) return prev
+      const suggestions = prev.polishPreview.suggestions.map((s) => ({ ...s, accepted: false }))
+      return { ...prev, polishPreview: { ...prev.polishPreview, suggestions }, editorText: prev.polishPreview.original }
+    })
+  }, [])
+
+  const discardPolish = useCallback(() => {
+    setState((prev) => {
+      if (!prev.polishPreview) return prev
+      return { ...prev, polishPreview: null, editorText: prev.polishPreview.original }
+    })
+  }, [])
+
+  const savePolish = useCallback(() => {
+    const projectId = state.selectedProjectId
+    const chapterNo = state.selectedChapterNo
+    if (!projectId || !chapterNo || !state.polishPreview) return
+    const preview = state.polishPreview
+    void run(async () => {
+      const text = applyPolishSuggestions(preview.original, preview.suggestions)
+      const saved = await call('chapters:save', { projectId, chapterNo, title: state.editorTitle, text })
+      patch({ chapter: state.chapter ? { ...state.chapter, chapter: saved } : state.chapter, polishPreview: null, undoStack: [], redoStack: [] })
+      const chapters = await call('chapters:list', { projectId })
+      patch({ chapters })
+    }, '润色结果已保存（仅采纳的改动）')
+  }, [run, state])
 
   const depolishAI = useCallback(() => {
     void run(async () => {
@@ -434,6 +484,7 @@ export function App(): JSX.Element {
             <button className={state.view === 'projects' ? 'active' : ''} onClick={() => patch({ view: 'projects' })}>项目</button>
             <button className={state.view === 'lorebook' ? 'active' : ''} onClick={() => patch({ view: 'lorebook' })}>世界书</button>
             <span className="spacer" />
+            <button onClick={() => void run(async () => { const r = await call('projects:importDemo', undefined); await showAlert(`示例《青云问道》已导入（${r.imported} 条世界书）`); await refreshWorkspace(); await loadProject(r.bookId) })}>示例</button>
             <button onClick={importFile}>导入</button>
             <button onClick={() => void createProject()}>＋</button>
           </div>
@@ -449,7 +500,14 @@ export function App(): JSX.Element {
                       <span className="muted">{entry.keywords.slice(0, 3).join('、')}{entry.always_active ? ' · 常驻' : ''}</span>
                     </div>
                     <div className="row-actions">
-                      <button onClick={async () => { const content = await askPrompt('条目内容', entry.content); if (content !== null) saveLoreEntry({ ...entry, content }) }}>改</button>
+                      <button onClick={async () => {
+                        const content = await askPrompt('条目内容', entry.content)
+                        const keywords = await askPrompt('关键词（逗号分隔）', entry.keywords.join('、'))
+                        const priority = await askPrompt('优先级 0-1000', String(entry.priority))
+                        if (content !== null && keywords !== null && priority !== null) {
+                          saveLoreEntry({ ...entry, content, keywords: keywords.split(/[,，]/).map((s) => s.trim()).filter(Boolean), priority: Math.max(0, Math.min(1000, Number(priority) || 50)) })
+                        }
+                      }}>改</button>
                       <button onClick={() => deleteLoreEntry(entry.id)}>删</button>
                     </div>
                   </div>
@@ -460,11 +518,15 @@ export function App(): JSX.Element {
                   onClick={async () => {
                     const name = await askPrompt('条目名称')
                     const content = await askPrompt('条目内容')
+                    const keywords = await askPrompt('关键词（逗号分隔）', '')
+                    const priority = await askPrompt('优先级 0-1000', '50')
+                    const always = await askPrompt('常驻注入？输入 yes 表示常驻', '')
                     if (name && content && state.selectedProjectId) {
                       saveLoreEntry({
                         id: `wb_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`, name, content,
-                        keywords: [], is_regex: false, case_sensitive: false, always_active: false, enabled: true,
-                        priority: 50, scan_depth: 0, inject_target: 'system', inject_position: 'append', insertion_depth: 0,
+                        keywords: (keywords ?? '').split(/[,，]/).map((s) => s.trim()).filter(Boolean), is_regex: false, case_sensitive: false,
+                        always_active: always?.toLowerCase() === 'yes', enabled: true,
+                        priority: Math.max(0, Math.min(1000, Number(priority) || 50)), scan_depth: 0, inject_target: 'system', inject_position: 'append', insertion_depth: 0,
                         book_id: state.selectedProjectId, volume_id: undefined, tags: [], version: 1,
                         created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
                       })
@@ -499,6 +561,126 @@ export function App(): JSX.Element {
                   <button onClick={() => void exportAI()}>导出文本</button>
                   <button onClick={() => void exportRich()}>EPUB/PDF/DOCX</button>
                   <button onClick={() => void deleteProject(false)} className="danger">删除书籍</button>
+                </div>
+              </div>
+              <div className="panel-section">
+                <div className="section-title">高级工具箱</div>
+                <div className="action-grid">
+                  <button onClick={() => void run(async () => {
+                    const phase = await askPrompt('进入阶段 id（topic/setting/character/outline/volume/chapter/writing/revision/done）')
+                    if (phase && state.selectedProjectId) await call('projects:phase', { projectId: state.selectedProjectId, phase: phase as never })
+                  })}>进入阶段</button>
+                  <button onClick={() => void run(async () => {
+                    const phase = await askPrompt('提交阶段 id')
+                    const artifact = await askPrompt('阶段产物全文')
+                    if (phase && artifact && state.selectedProjectId) {
+                      const book = await call('projects:commit', { projectId: state.selectedProjectId, phase: phase as never, artifact })
+                      await showAlert(`已提交：${book.currentPhase}`, '阶段提交')
+                    }
+                  })}>提交阶段</button>
+                  <button onClick={() => void run(async () => {
+                    if (!state.selectedProjectId) return
+                    const audit = await call('projects:audit', { projectId: state.selectedProjectId })
+                    await showAlert(audit.map((a) => `${a.at} ${a.action} ${a.phase} ${a.detail}`).join('\n') || '暂无审计', '项目审计')
+                  })}>审计日志</button>
+                  <button onClick={() => void run(async () => {
+                    if (!state.selectedProjectId) return
+                    const sourceId = await askPrompt('源项目 ID')
+                    if (sourceId) { const book = await call('projects:clone', { sourceId }); await showAlert(`已克隆：${book.title}`, '克隆项目'); await refreshWorkspace() }
+                  })}>克隆项目</button>
+                  <button onClick={() => void run(async () => {
+                    if (!state.selectedProjectId) return
+                    const advice = await askPrompt('诊断建议')
+                    if (advice) { const r = await call('agent:applyAdvice', { text: state.editorText, advice }); setEditorText(r.revised) }
+                  })}>应用建议</button>
+                  <button onClick={() => void run(async () => {
+                    if (!state.selectedProjectId || !state.selectedChapterNo) return
+                    const mode = await askPrompt('修订模式（proofread/rhythm/style）', 'proofread')
+                    if (mode && ['proofread', 'rhythm', 'style'].includes(mode)) { const r = await call('agent:revise', { projectId: state.selectedProjectId, chapterNo: state.selectedChapterNo, mode: mode as 'proofread' | 'rhythm' | 'style' }); setEditorText(r.revised) }
+                  })}>AI 修订</button>
+                  <button onClick={() => void run(async () => {
+                    const stats = await call('chapters:wordcount', { text: state.editorText })
+                    await showAlert(`总字符 ${stats.totalChars} · 中文 ${stats.cjkChars} · 段落 ${stats.paragraphs} · 对话占比 ${Math.round(stats.dialogueRatio * 100)}%`, '字数统计')
+                  })}>字数统计</button>
+                  <button onClick={() => void run(async () => {
+                    const lib = await call('prompts:list', undefined)
+                    await showAlert(lib.map((p) => `${p.id} · ${p.name}`).join('\n') || '无模板', '提示词库')
+                  })}>提示词库</button>
+                  <button onClick={() => void run(async () => {
+                    if (!state.selectedProjectId) return
+                    const items = await call('extras:foreshadows', { projectId: state.selectedProjectId })
+                    await showAlert(items.map((f) => `[${f.status}] ${f.content} @${f.plantChapter}`).join('\n') || '无伏笔', '伏笔')
+                  })}>伏笔列表</button>
+                  <button onClick={() => void run(async () => {
+                    if (!state.selectedProjectId) return
+                    const content = await askPrompt('伏笔内容')
+                    const chapterNo = await askPrompt('埋设章节号', String(state.selectedChapterNo ?? 1))
+                    if (content && chapterNo) await call('extras:plantForeshadow', { projectId: state.selectedProjectId, content, plantChapter: Number(chapterNo) })
+                  })}>登记伏笔</button>
+                  <button onClick={() => void run(async () => {
+                    if (!state.selectedProjectId) return
+                    const items = await call('extras:glossary', { projectId: state.selectedProjectId })
+                    await showAlert(items.map((g) => `${g.term}：${g.definition}`).join('\n') || '无术语', '术语表')
+                  })}>术语表</button>
+                  <button onClick={() => void run(async () => {
+                    if (!state.selectedProjectId) return
+                    const term = await askPrompt('术语')
+                    const definition = await askPrompt('释义')
+                    if (term && definition) await call('extras:addGlossary', { projectId: state.selectedProjectId, term, definition })
+                  })}>添加术语</button>
+                  <button onClick={() => void run(async () => {
+                    if (!state.selectedProjectId) return
+                    const items = await call('extras:ideas', { projectId: state.selectedProjectId })
+                    await showAlert(items.map((i) => i.content).join('\n') || '无灵感', '灵感库')
+                  })}>灵感列表</button>
+                  <button onClick={() => void run(async () => {
+                    if (!state.selectedProjectId) return
+                    const content = await askPrompt('灵感内容')
+                    if (content) await call('extras:addIdea', { projectId: state.selectedProjectId, content })
+                  })}>添加灵感</button>
+                  <button onClick={() => void run(async () => {
+                    if (!state.selectedProjectId) return
+                    const entries = await call('extras:ledger', { projectId: state.selectedProjectId })
+                    await showAlert(entries.map((e) => `${e.entity}.${e.field} = ${e.value} @ch${e.chapterNo}`).join('\n') || '无账本', '事实账本')
+                  })}>事实账本</button>
+                  <button onClick={() => void run(async () => {
+                    if (!state.selectedProjectId) return
+                    const events = await call('extras:timeline', { projectId: state.selectedProjectId })
+                    await showAlert(events.map((e) => `ch${e.chapterNo} ${e.bookTime} ${e.event}`).join('\n') || '无时间线', '时间线')
+                  })}>时间线</button>
+                  <button onClick={() => void run(async () => {
+                    if (!state.selectedProjectId) return
+                    const report = await call('extras:consistencyAudit', { projectId: state.selectedProjectId })
+                    const text = [
+                      ...report.conflicts.map((c) => `冲突：${c.entity}.${c.field} → ${c.history.map((h) => h.value).join(' | ')}`),
+                      ...report.timelineIssues.map((t) => `时间线：${t.message}`),
+                      ...report.sedimentSuggestions.map((s) => `沉淀建议：${s.entity}`),
+                    ].join('\n') || '无异常'
+                    await showAlert(text, '一致性巡检')
+                  })}>一致性巡检</button>
+                  <button onClick={() => void run(async () => {
+                    if (!state.selectedProjectId) return
+                    const wizard = await call('guide:wizardStatus', { projectId: state.selectedProjectId })
+                    await showAlert(`当前步骤：${wizard.step}\n${Object.entries(wizard.status).map(([k, v]) => `${k}=${v}`).join('\n')}`, '创作向导')
+                  })}>向导状态</button>
+                  <button onClick={() => void run(async () => {
+                    if (!state.selectedProjectId) return
+                    const step = await askPrompt('向导步骤（genre/title/setting/outline/start）', 'setting')
+                    const artifact = await askPrompt('步骤产物')
+                    if (step && artifact) await call('guide:wizardAction', { projectId: state.selectedProjectId, action: 'commit', step: step as never, artifact })
+                  })}>提交向导</button>
+                  <button onClick={() => void run(async () => {
+                    const text = await askPrompt('输入自然语言指令')
+                    if (text) { const intent = await call('guide:parseIntent', { text }); await showAlert(intent ? `${intent.action}（置信度 ${intent.confidence}）` : '未命中意图', '意图解析') }
+                  })}>意图解析</button>
+                  <button onClick={() => void run(async () => {
+                    const result = await call('lorebook:exportSillyTavern', undefined)
+                    await showAlert(`已导出 ${result.count} 条到 SillyTavern 格式：\n\n${result.content.slice(0, 800)}`, '导出到酒馆')
+                  })}>导出到酒馆</button>
+                  <button onClick={() => void run(async () => {
+                    const content = await askPrompt('粘贴世界书 JSON（Operit/SillyTavern/角色卡）')
+                    if (content && state.selectedProjectId) { const r = await call('lorebook:importJson', { content, bookId: state.selectedProjectId }); await showAlert(`导入 ${r.imported} 条`, '世界书导入'); await loadLorebook(state.selectedProjectId) }
+                  })}>导入世界书</button>
                 </div>
               </div>
               <div className="panel-section">
@@ -557,6 +739,32 @@ export function App(): JSX.Element {
                   <input value={state.replaceText} onChange={(e) => patch({ replaceText: e.target.value })} placeholder="替换为" />
                   <button onClick={() => doFindReplace(true)}>全部替换</button>
                   <button onClick={() => patch({ findOpen: false })}>关闭</button>
+                </div>
+              )}
+
+              {state.polishPreview && (
+                <div className="polish-panel">
+                  <div className="polish-head">
+                    <strong>润色预览</strong>
+                    <span className="muted">共 {state.polishPreview.suggestions.length} 条建议 · 已采纳 {state.polishPreview.suggestions.filter((s) => s.accepted).length} 条</span>
+                    <span className="spacer" />
+                    <button onClick={acceptAllPolish}>全部采纳</button>
+                    <button onClick={rejectAllPolish}>全部拒绝</button>
+                    <button onClick={savePolish}>确认保存</button>
+                    <button onClick={discardPolish}>放弃还原</button>
+                  </div>
+                  <div className="polish-list">
+                    {state.polishPreview.suggestions.map((s) => (
+                      <div className={`polish-item ${s.accepted ? 'accepted' : ''}`} key={s.id}>
+                        <div className="polish-item-head">
+                          <b>{s.original === '' ? '（新增段）' : s.polished === '' ? '（删除段）' : `第 ${s.paraIndex} 段`}</b>
+                          <button onClick={() => togglePolish(s.id)}>{s.accepted ? '✓ 已采纳 · 撤销' : '采纳这条'}</button>
+                        </div>
+                        {s.original ? <div className="polish-original">原文：{s.original}</div> : null}
+                        {s.polished ? <div className="polish-polished">改后：{s.polished}</div> : null}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
               <textarea

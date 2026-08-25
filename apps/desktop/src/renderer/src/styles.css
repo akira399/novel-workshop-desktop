@@ -125,3 +125,13 @@ button:disabled { opacity: .4; cursor: default; }
 .prompt-input { width: 100%; padding: 8px 10px; font-size: 14px; background: #0d0d0d; color: #eee; border: 1px solid var(--border); border-radius: 6px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
 .alert-body { white-space: pre-wrap; word-break: break-word; }
+
+.polish-panel { border-top: 1px solid var(--border); background: #131313; padding: 8px 12px; max-height: 280px; overflow: auto; display: flex; flex-direction: column; gap: 8px; }
+.polish-head { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.polish-head .spacer { flex: 1; }
+.polish-list { display: flex; flex-direction: column; gap: 6px; }
+.polish-item { border: 1px solid #2a2a2a; border-radius: 6px; padding: 6px 8px; background: #161616; }
+.polish-item.accepted { border-color: #4a8a5a; }
+.polish-item-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.polish-original, .polish-polished { font-size: 12px; line-height: 1.6; color: #999; white-space: pre-wrap; word-break: break-all; }
+.polish-polished { color: #bbb; }
