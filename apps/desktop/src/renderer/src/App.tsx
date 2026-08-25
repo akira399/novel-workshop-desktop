@@ -11,6 +11,17 @@ const GENRES = [
   ['light-novel', '轻小说'], ['history', '历史'], ['military', '军事'], ['business', '商战'], ['strategy', '权谋'],
 ] as const
 
+const PROVIDER_PRESETS: Array<{ id: ModelProfile['provider']; label: string; baseUrl: string }> = [
+  { id: 'openai', label: 'OpenAI', baseUrl: 'https://api.openai.com/v1' },
+  { id: 'deepseek', label: 'DeepSeek', baseUrl: 'https://api.deepseek.com' },
+  { id: 'moonshot', label: 'Moonshot Kimi', baseUrl: 'https://api.moonshot.cn/v1' },
+  { id: 'anthropic', label: 'Anthropic', baseUrl: 'https://api.anthropic.com/v1' },
+  { id: 'google', label: 'Google Gemini', baseUrl: 'https://generativelanguage.googleapis.com/v1beta' },
+  { id: 'ollama', label: 'Ollama（本地）', baseUrl: 'http://127.0.0.1:11434/v1' },
+  { id: 'zhipu', label: '智谱 GLM', baseUrl: 'https://open.bigmodel.cn/api/paas/v4' },
+  { id: 'custom', label: '自定义提供商（OpenAI 兼容）', baseUrl: '' },
+]
+
 interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
@@ -58,6 +69,8 @@ interface UiState {
   modelDraft: ModelProfile
   showSettings: boolean
   reader: { path: string; ext: string; text: string | null } | null
+  remoteModels: string[]
+  fetchingModels: boolean
   chatMessages: ChatMessage[]
   chatInput: string
   chatBusy: boolean
@@ -74,7 +87,7 @@ const initialUi: UiState = {
   chapters: [], selectedChapterNo: null, chapter: null, editorText: '', editorTitle: '',
   undoStack: [], redoStack: [], findOpen: false, findText: '', replaceText: '', fontSize: 16,
   view: 'projects', lorebook: null, library: [], models: [], modelDraft: emptyModel,
-  showSettings: false, reader: null, chatMessages: [], chatInput: '', chatBusy: false,
+  showSettings: false, reader: null, remoteModels: [], fetchingModels: false, chatMessages: [], chatInput: '', chatBusy: false,
   promptRequest: null, alertRequest: null, polishPreview: null, error: null, notice: null, busy: false,
 }
 
@@ -432,6 +445,18 @@ export function App(): JSX.Element {
   const testModel = useCallback((id: string) => {
     void run(async () => { const result = await call('models:test', { id }); await showAlert(result.message) })
   }, [run, showAlert])
+
+  const fetchRemoteModels = useCallback(() => {
+    const draft = state.modelDraft
+    if (!draft.provider) return
+    patch({ fetchingModels: true, remoteModels: [] })
+    void run(async () => {
+      const result = await call('models:fetch', { provider: draft.provider, baseUrl: draft.baseUrl, apiKey: draft.apiKey })
+      patch({ remoteModels: result.models, fetchingModels: false })
+      if (result.error) await showAlert(result.error, '获取模型列表失败')
+      else await showAlert(`获取到 ${result.models.length} 个模型，可在下方选择。`, '模型列表')
+    })
+  }, [run, state.modelDraft, showAlert])
 
   const openReader = useCallback(() => {
     void run(async () => {
@@ -824,6 +849,7 @@ export function App(): JSX.Element {
       </div>
 
       <footer className="chat-bar">
+        <div className="chat-head">AI 对话 · 与助手沟通即可完成写作操作</div>
         <div className="chat-messages">
           {state.chatMessages.map((msg, i) => (
             <div className={`chat-msg ${msg.role}`} key={i}><b>{msg.role === 'user' ? '你' : 'AI'}</b><span>{msg.content}</span></div>
@@ -859,18 +885,37 @@ export function App(): JSX.Element {
               {state.models.length === 0 && <div className="empty">还没有模型，添加一个即可开始 AI 创作</div>}
               <div className="model-form">
                 <h4>{state.modelDraft.id ? '编辑模型' : '新增模型'}</h4>
-                <label>名称<input value={state.modelDraft.name} onChange={(e) => patch({ modelDraft: { ...state.modelDraft, name: e.target.value } })} /></label>
-                <label>Provider
-                  <select value={state.modelDraft.provider} onChange={(e) => patch({ modelDraft: { ...state.modelDraft, provider: e.target.value as ModelProfile['provider'] } })}>
-                    <option value="custom">OpenAI 兼容（自定义）</option>
-                    <option value="openai">OpenAI</option>
-                    <option value="anthropic">Anthropic</option>
-                    <option value="google">Google Gemini</option>
+                <label>名称<input value={state.modelDraft.name} onChange={(e) => patch({ modelDraft: { ...state.modelDraft, name: e.target.value } })} placeholder="如：我的 DeepSeek" /></label>
+                <label>提供方
+                  <select value={state.modelDraft.provider} onChange={(e) => {
+                    const provider = e.target.value as ModelProfile['provider']
+                    const preset = PROVIDER_PRESETS.find((p) => p.id === provider)
+                    patch({ modelDraft: { ...state.modelDraft, provider, ...(preset ? { baseUrl: preset.baseUrl } : {}) } })
+                  }}>
+                    {PROVIDER_PRESETS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
                   </select>
                 </label>
-                <label>Base URL<input value={state.modelDraft.baseUrl ?? ''} onChange={(e) => patch({ modelDraft: { ...state.modelDraft, baseUrl: e.target.value } })} /></label>
-                <label>API Key<input type="password" value={state.modelDraft.apiKey ?? ''} onChange={(e) => patch({ modelDraft: { ...state.modelDraft, apiKey: e.target.value } })} /></label>
-                <label>模型名<input value={state.modelDraft.model} onChange={(e) => patch({ modelDraft: { ...state.modelDraft, model: e.target.value } })} /></label>
+                <label>Base URL<input value={state.modelDraft.baseUrl ?? ''} onChange={(e) => patch({ modelDraft: { ...state.modelDraft, baseUrl: e.target.value } })} placeholder="https://api.example.com/v1" /></label>
+                <label>API Key<input type="password" value={state.modelDraft.apiKey ?? ''} onChange={(e) => patch({ modelDraft: { ...state.modelDraft, apiKey: e.target.value } })} placeholder="sk-..." /></label>
+                <div className="model-fetch-row">
+                  <button onClick={fetchRemoteModels} disabled={state.fetchingModels || !state.modelDraft.apiKey || state.modelDraft.provider === 'custom'}>自动获取模型列表</button>
+                  {state.fetchingModels && <span className="muted">获取中…</span>}
+                </div>
+                <label>模型名
+                  <input list="remote-models" value={state.modelDraft.model} onChange={(e) => patch({ modelDraft: { ...state.modelDraft, model: e.target.value } })} placeholder="deepseek-chat / gpt-4o / claude-..." />
+                </label>
+                {state.remoteModels.length > 0 && (
+                  <datalist id="remote-models">
+                    {state.remoteModels.map((m) => <option key={m} value={m} />)}
+                  </datalist>
+                )}
+                {state.remoteModels.length > 0 && (
+                  <div className="remote-model-list">
+                    {state.remoteModels.slice(0, 30).map((m) => (
+                      <button key={m} onClick={() => patch({ modelDraft: { ...state.modelDraft, model: m } })}>{m}</button>
+                    ))}
+                  </div>
+                )}
                 <button onClick={() => { const draft = { ...state.modelDraft, id: state.modelDraft.id || `model_${Date.now().toString(36)}` }; saveModel(draft) }} disabled={state.busy || !state.modelDraft.name.trim() || !state.modelDraft.model.trim()}>保存模型</button>
               </div>
             </div>

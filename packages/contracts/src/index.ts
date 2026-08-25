@@ -128,7 +128,7 @@ export interface DiagnosticRequest {
 
 // ─────────────────────────── 模型配置（阶段 2） ───────────────────────────
 
-export type ModelProvider = 'openai' | 'anthropic' | 'google' | 'custom'
+export type ModelProvider = 'openai' | 'anthropic' | 'google' | 'deepseek' | 'moonshot' | 'ollama' | 'zhipu' | 'custom'
 
 export interface ModelProfile {
   id: string
@@ -222,6 +222,7 @@ export interface CommandMap {
   'models:save': { request: { profile: ModelProfile }; response: ModelProfile }
   'models:delete': { request: { id: string }; response: void }
   'models:test': { request: { id: string }; response: { ok: boolean; message: string; latencyMs: number } }
+  'models:fetch': { request: { provider: ModelProvider; baseUrl?: string; apiKey?: string }; response: { models: string[]; error?: string } }
   'agent:complete': { request: { profileId?: string; messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>; temperature?: number; maxTokens?: number }; response: { text: string; model: string; provider: string } }
   'agent:writeChapter': { request: { projectId: string; chapterNo: number; brief?: string }; response: { text: string; model: string } }
   'agent:polish': { request: { projectId: string; chapterNo: number; text?: string; instruction?: string }; response: { suggestions: PolishSuggestion[]; polished: string; model: string } }

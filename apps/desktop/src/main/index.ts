@@ -444,6 +444,10 @@ async function dispatch<K extends CommandName>(command: K, payload: CommandReque
         const req = payload as { id: string }
         return { ok: true, value: (await modelService!.test(req.id)) as CommandResponse<K> }
       }
+      case 'models:fetch': {
+        const req = payload as { provider: ModelProfile['provider']; baseUrl?: string; apiKey?: string }
+        return { ok: true, value: (await modelService!.fetchModels(req.provider, req.baseUrl, req.apiKey)) as CommandResponse<K> }
+      }
       case 'agent:complete': {
         const req = payload as { profileId?: string; messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>; temperature?: number; maxTokens?: number }
         return { ok: true, value: (await modelService!.complete(req.profileId, req.messages, { temperature: req.temperature, maxTokens: req.maxTokens })) as CommandResponse<K> }

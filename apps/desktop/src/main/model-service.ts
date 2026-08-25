@@ -68,6 +68,39 @@ export class ModelService {
     return await this.completeOpenAICompatible(profile, messages, options)
   }
 
+  async fetchModels(provider: ModelProfile['provider'], baseUrl?: string, apiKey?: string): Promise<{ models: string[]; error?: string }> {
+    try {
+      if (provider === 'google') {
+        const base = (baseUrl ?? '').trim().replace(/\/+$/, '') || 'https://generativelanguage.googleapis.com/v1beta'
+        const url = `${base}/models?key=${encodeURIComponent(apiKey ?? '')}`
+        const response = await fetch(url)
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        const data = await response.json() as { models?: Array<{ name?: string }> }
+        const models = (data.models ?? [])
+          .map((m) => m.name ?? '')
+          .filter((n) => n.includes('/'))
+          .map((n) => n.slice(n.lastIndexOf('/') + 1))
+          .filter(Boolean)
+        return { models }
+      }
+      if (provider === 'anthropic') {
+        return { models: [], error: 'Anthropic 暂不支持自动获取模型列表，请手动填写模型名（如 claude-sonnet-4-20250514）' }
+      }
+      const base = (baseUrl ?? '').trim().replace(/\/+$/, '') || 'https://api.openai.com/v1'
+      const response = await fetch(`${base}/models`, {
+        headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+      })
+      if (!response.ok) {
+        const text = await response.text().catch(() => '')
+        throw new Error(`HTTP ${response.status}: ${text.slice(0, 200)}`)
+      }
+      const data = await response.json() as { data?: Array<{ id?: string }> }
+      return { models: (data.data ?? []).map((m) => m.id ?? '').filter(Boolean).sort() }
+    } catch (error) {
+      return { models: [], error: error instanceof Error ? error.message : String(error) }
+    }
+  }
+
   async test(profileId: string): Promise<{ ok: boolean; message: string; latencyMs: number }> {
     const started = Date.now()
     try {
