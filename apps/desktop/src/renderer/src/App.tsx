@@ -74,6 +74,7 @@ interface UiState {
   chatMessages: ChatMessage[]
   chatInput: string
   chatBusy: boolean
+  activeModelId: string | null
   promptRequest: PromptRequest | null
   alertRequest: AlertRequest | null
   polishPreview: { original: string; polished: string; suggestions: PolishSuggestion[] } | null
@@ -87,7 +88,7 @@ const initialUi: UiState = {
   chapters: [], selectedChapterNo: null, chapter: null, editorText: '', editorTitle: '',
   undoStack: [], redoStack: [], findOpen: false, findText: '', replaceText: '', fontSize: 16,
   view: 'projects', lorebook: null, library: [], models: [], modelDraft: emptyModel,
-  showSettings: false, reader: null, remoteModels: [], fetchingModels: false, chatMessages: [], chatInput: '', chatBusy: false,
+  showSettings: false, reader: null, remoteModels: [], fetchingModels: false, chatMessages: [], chatInput: '', chatBusy: false, activeModelId: null,
   promptRequest: null, alertRequest: null, polishPreview: null, error: null, notice: null, busy: false,
 }
 
@@ -104,7 +105,9 @@ export function App(): JSX.Element {
   const [state, setState] = useState<UiState>(initialUi)
   const editorRef = useRef<HTMLTextAreaElement | null>(null)
 
-  const patch = useCallback((part: Partial<UiState>) => setState((prev) => ({ ...prev, ...part })), [])
+  const patch = useCallback((part: Partial<UiState> | ((prev: UiState) => Partial<UiState>)) => {
+    setState((prev) => ({ ...prev, ...(typeof part === 'function' ? part(prev) : part) }))
+  }, [])
   const run = useCallback(async (action: () => Promise<void>, successNotice?: string) => {
     patch({ busy: true, error: null, notice: null })
     try {
@@ -137,7 +140,12 @@ export function App(): JSX.Element {
 
   const loadModels = useCallback(async () => {
     const models = await call('models:list', undefined)
-    patch({ models })
+    patch((prev) => ({
+      models,
+      activeModelId: prev.activeModelId && models.some((m) => m.id === prev.activeModelId)
+        ? prev.activeModelId
+        : models[0]?.id ?? null,
+    }))
   }, [patch])
 
   const loadLorebook = useCallback(async (bookId?: string) => {
@@ -435,12 +443,12 @@ export function App(): JSX.Element {
     void run(async () => {
       const saved = await call('models:save', { profile })
       const models = await call('models:list', undefined)
-      patch({ models, modelDraft: emptyModel })
+      patch((prev) => ({ models, modelDraft: emptyModel, activeModelId: prev.activeModelId ?? saved.id }))
       await showAlert(`模型「${saved.name}」已保存`)
     })
   }, [run, showAlert])
   const deleteModel = useCallback((id: string) => {
-    void run(async () => { await call('models:delete', { id }); const models = await call('models:list', undefined); patch({ models }) })
+    void run(async () => { await call('models:delete', { id }); const models = await call('models:list', undefined); patch((prev) => ({ models, activeModelId: prev.activeModelId === id ? models[0]?.id ?? null : prev.activeModelId })) })
   }, [run])
   const testModel = useCallback((id: string) => {
     void run(async () => { const result = await call('models:test', { id }); await showAlert(result.message) })
@@ -471,18 +479,24 @@ export function App(): JSX.Element {
     const text = state.chatInput.trim()
     if (!text || state.chatBusy) return
     const history: ChatMessage[] = [...state.chatMessages, { role: 'user', content: text }]
+    const profileId = state.activeModelId ?? undefined
     patch({ chatMessages: history, chatInput: '', chatBusy: true })
     void run(async () => {
-      const result = await call('agent:complete', {
-        messages: [
-          { role: 'system', content: '你是大肥鱼的小说工坊内置写作助手。你可以帮用户写章、润色、诊断、查世界书、管理项目等；请用中文简洁回答。' },
-          ...history,
-        ],
-        maxTokens: 2000,
-      })
-      patch({ chatMessages: [...history, { role: 'assistant', content: result.text }] })
+      try {
+        const result = await call('agent:complete', {
+          profileId,
+          messages: [
+            { role: 'system', content: '你是大肥鱼的小说工坊内置写作助手。你可以帮用户写章、润色、诊断、查世界书、管理项目等；请用中文简洁回答。' },
+            ...history,
+          ],
+          maxTokens: 2000,
+        })
+        patch({ chatMessages: [...history, { role: 'assistant', content: result.text }] })
+      } finally {
+        patch({ chatBusy: false })
+      }
     }, undefined)
-  }, [state.chatInput, state.chatMessages, state.chatBusy, run])
+  }, [state.chatInput, state.chatMessages, state.chatBusy, state.activeModelId, run])
 
   const selectedBook = state.book
   const promptRequest = state.promptRequest
@@ -857,6 +871,17 @@ export function App(): JSX.Element {
           {state.chatMessages.length === 0 && <div className="chat-hint">和 AI 助手对话，可以帮你写章、润色、诊断、管理作品…</div>}
         </div>
         <div className="chat-input-row">
+          <select
+            className="chat-model-select"
+            value={state.activeModelId ?? ''}
+            onChange={(e) => patch({ activeModelId: e.target.value || null })}
+            title="切换当前对话模型"
+          >
+            {state.models.length === 0 && <option value="">未配置模型</option>}
+            {state.models.map((m) => (
+              <option key={m.id} value={m.id}>{m.name} · {m.model}</option>
+            ))}
+          </select>
           <input
             value={state.chatInput}
             onChange={(e) => patch({ chatInput: e.target.value })}

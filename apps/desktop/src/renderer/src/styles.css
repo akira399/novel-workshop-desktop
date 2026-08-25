@@ -105,6 +105,7 @@ button:disabled { opacity: .4; cursor: default; }
 .chat-hint { color: #aaa; font-size: 12px; padding: 8px; }
 .chat-input-row { display: flex; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--border); }
 .chat-input-row input { flex: 1; background: #fff; color: #111; border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; }
+.chat-model-select { max-width: 220px; background: #fff; color: #111; border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; }
 
 .modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: flex; align-items: center; justify-content: center; z-index: 100; }
 .modal { width: 640px; max-width: 94vw; max-height: 84vh; background: #fff; border: 1px solid #ddd; border-radius: 12px; display: flex; flex-direction: column; box-shadow: 0 8px 30px rgba(0,0,0,.12); color: #111; }
