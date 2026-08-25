@@ -139,3 +139,11 @@ button:disabled { opacity: .4; cursor: default; }
 .model-fetch-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .remote-model-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .remote-model-list button { font-size: 12px; padding: 2px 8px; }
+
+.batch-form { border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin-bottom: 12px; background: #fafafa; }
+.batch-form h4 { margin: 0 0 10px; }
+.batch-form label { display: block; margin-bottom: 8px; font-size: 13px; color: #666; }
+.batch-form input, .batch-form select, .batch-form textarea { display: block; width: 100%; margin-top: 4px; padding: 6px 8px; background: #fff; color: #111; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; }
+.model-form-head { display: flex; justify-content: space-between; align-items: center; }
+.model-form-head h4 { margin: 0; }
+.active-badge { display: inline-block; margin-left: 6px; font-size: 11px; color: #fff; background: #111; border-radius: 4px; padding: 0 5px; }

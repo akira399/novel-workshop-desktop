@@ -75,6 +75,10 @@ interface UiState {
   chatInput: string
   chatBusy: boolean
   activeModelId: string | null
+  batchProvider: ModelProfile['provider']
+  batchBaseUrl: string
+  batchApiKey: string
+  batchModelNames: string
   promptRequest: PromptRequest | null
   alertRequest: AlertRequest | null
   polishPreview: { original: string; polished: string; suggestions: PolishSuggestion[] } | null
@@ -89,6 +93,7 @@ const initialUi: UiState = {
   undoStack: [], redoStack: [], findOpen: false, findText: '', replaceText: '', fontSize: 16,
   view: 'projects', lorebook: null, library: [], models: [], modelDraft: emptyModel,
   showSettings: false, reader: null, remoteModels: [], fetchingModels: false, chatMessages: [], chatInput: '', chatBusy: false, activeModelId: null,
+  batchProvider: 'deepseek', batchBaseUrl: 'https://api.deepseek.com', batchApiKey: '', batchModelNames: '',
   promptRequest: null, alertRequest: null, polishPreview: null, error: null, notice: null, busy: false,
 }
 
@@ -465,6 +470,33 @@ export function App(): JSX.Element {
       else await showAlert(`获取到 ${result.models.length} 个模型，可在下方选择。`, '模型列表')
     })
   }, [run, state.modelDraft, showAlert])
+
+  const saveBatchModels = useCallback(() => {
+    const names = state.batchModelNames.split(/[\n,，]/).map((s) => s.trim()).filter(Boolean)
+    if (names.length === 0) return
+    const providerLabel = PROVIDER_PRESETS.find((p) => p.id === state.batchProvider)?.label ?? state.batchProvider
+    void run(async () => {
+      let firstId: string | null = null
+      for (const model of names) {
+        const profile: ModelProfile = {
+          id: `model_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+          name: `${providerLabel} · ${model}`,
+          provider: state.batchProvider,
+          baseUrl: state.batchBaseUrl,
+          apiKey: state.batchApiKey,
+          model,
+          temperature: 0.8,
+          maxTokens: 4096,
+          enabled: true,
+        }
+        await call('models:save', { profile })
+        if (!firstId) firstId = profile.id
+      }
+      const models = await call('models:list', undefined)
+      patch((prev) => ({ models, modelDraft: emptyModel, batchModelNames: '', activeModelId: prev.activeModelId ?? firstId }))
+      await showAlert(`已批量保存 ${names.length} 个模型`, '模型添加完成')
+    })
+  }, [run, state.batchProvider, state.batchBaseUrl, state.batchApiKey, state.batchModelNames, showAlert])
 
   const openReader = useCallback(() => {
     void run(async () => {
@@ -899,8 +931,12 @@ export function App(): JSX.Element {
             <div className="modal-body">
               {state.models.map((m) => (
                 <div className="model-item" key={m.id}>
-                  <div><strong>{m.name}</strong> <span className="muted">{m.provider} · {m.model}</span></div>
+                  <div>
+                    <strong>{m.name}</strong> {state.activeModelId === m.id && <span className="active-badge">当前</span>}
+                    <span className="muted">{m.provider} · {m.model}</span>
+                  </div>
                   <span>
+                    <button onClick={() => patch({ activeModelId: m.id })}>设为当前</button>
                     <button onClick={() => patch({ modelDraft: m })}>编辑</button>
                     <button onClick={() => testModel(m.id)}>测试</button>
                     <button onClick={() => deleteModel(m.id)}>删除</button>
@@ -908,8 +944,29 @@ export function App(): JSX.Element {
                 </div>
               ))}
               {state.models.length === 0 && <div className="empty">还没有模型，添加一个即可开始 AI 创作</div>}
+              <div className="batch-form">
+                <h4>批量添加模型（同一提供方多个模型）</h4>
+                <label>提供方
+                  <select value={state.batchProvider} onChange={(e) => {
+                    const provider = e.target.value as ModelProfile['provider']
+                    const preset = PROVIDER_PRESETS.find((p) => p.id === provider)
+                    patch({ batchProvider: provider, ...(preset ? { batchBaseUrl: preset.baseUrl } : {}) })
+                  }}>
+                    {PROVIDER_PRESETS.filter((p) => p.id !== 'custom').map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+                  </select>
+                </label>
+                <label>Base URL<input value={state.batchBaseUrl} onChange={(e) => patch({ batchBaseUrl: e.target.value })} /></label>
+                <label>API Key<input type="password" value={state.batchApiKey} onChange={(e) => patch({ batchApiKey: e.target.value })} /></label>
+                <label>模型名（每行一个）
+                  <textarea rows={4} value={state.batchModelNames} onChange={(e) => patch({ batchModelNames: e.target.value })} placeholder={'deepseek-chat\ndeepseek-reasoner'} />
+                </label>
+                <button onClick={saveBatchModels} disabled={state.busy || state.batchModelNames.trim().split(/[\n,，]/).filter(Boolean).length === 0}>批量保存模型</button>
+              </div>
               <div className="model-form">
-                <h4>{state.modelDraft.id ? '编辑模型' : '新增模型'}</h4>
+                <div className="model-form-head">
+                  <h4>{state.modelDraft.id ? '编辑模型' : '新增模型'}</h4>
+                  <button onClick={() => patch({ modelDraft: emptyModel })}>＋ 新增单个模型</button>
+                </div>
                 <label>名称<input value={state.modelDraft.name} onChange={(e) => patch({ modelDraft: { ...state.modelDraft, name: e.target.value } })} placeholder="如：我的 DeepSeek" /></label>
                 <label>提供方
                   <select value={state.modelDraft.provider} onChange={(e) => {
