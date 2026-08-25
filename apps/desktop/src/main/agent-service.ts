@@ -111,6 +111,63 @@ export class AgentService {
     return { revised: result.text.trim(), model: result.model }
   }
 
+  async autogenLorebook(bookId: string): Promise<{ imported: number; names: string[] }> {
+    const book = await this.deps.workspace.getProject(bookId)
+    const tpl = await this.template('lorebook-autogen')
+    const prompt = renderPromptTemplate(tpl, { title: book.title, genre: book.genre })
+    const result = await this.callModel(undefined, '你是世界书设定生成助手。只输出 JSON 数组，不要多余文字。', prompt, 4000)
+    const raw = result.text.trim()
+    const jsonText = /```json\s*([\s\S]*?)\s*```/.exec(raw)?.[1] ?? raw
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(jsonText)
+    } catch {
+      throw new Error('AI 生成结果不是有效 JSON，请重试')
+    }
+    if (!Array.isArray(parsed)) throw new Error('AI 生成结果应为 JSON 数组')
+    const names: string[] = []
+    for (const item of parsed) {
+      if (!item || typeof item !== 'object') continue
+      const rec = item as Record<string, unknown>
+      const name = typeof rec.name === 'string' ? rec.name.trim() : '未命名'
+      const content = typeof rec.content === 'string' ? rec.content.trim() : ''
+      if (!content) continue
+      const keywords = Array.isArray(rec.keywords) ? rec.keywords.filter((k): k is string => typeof k === 'string') : []
+      const alwaysActive = rec.always_active === true
+      const now = new Date().toISOString()
+      await this.deps.workspace.saveLoreEntry({
+        id: `wb_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+        name,
+        content,
+        keywords,
+        is_regex: false,
+        case_sensitive: false,
+        always_active: alwaysActive,
+        enabled: true,
+        priority: alwaysActive ? 90 : 50,
+        scan_depth: 0,
+        inject_target: 'system',
+        inject_position: 'append',
+        insertion_depth: 0,
+        book_id: bookId,
+        volume_id: undefined,
+        tags: [],
+        version: 1,
+        created_at: now,
+        updated_at: now,
+      })
+      names.push(name)
+    }
+    return { imported: names.length, names }
+  }
+
+  async marketResearch(genre: string, topic: string): Promise<{ report: string; model: string }> {
+    const tpl = await this.template('creation-market')
+    const prompt = renderPromptTemplate(tpl, { genre, seed: topic || '热点方向' })
+    const result = await this.callModel(undefined, '你是网文市场调研分析师，输出调研报告。', prompt, 4000)
+    return { report: result.text.trim(), model: result.model }
+  }
+
   /** 通用工具：给渲染进程一个可自定义的完成入口（高级用户/自接端点）。 */
   async complete(profileId: string | undefined, messages: ChatMessage[], options?: { temperature?: number; maxTokens?: number }) {
     return await this.deps.model.complete(profileId, messages, options)

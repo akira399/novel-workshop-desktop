@@ -492,6 +492,43 @@ export function App(): JSX.Element {
           {state.view === 'lorebook' ? (
             <div className="sidebar-scroll">
               <div className="panel-section">
+                <div className="section-title">AI 设定生成</div>
+                <div className="action-grid">
+                  <button disabled={!state.selectedProjectId} onClick={() => void run(async () => {
+                    if (!state.selectedProjectId) return
+                    const result = await call('lorebook:autogen', { bookId: state.selectedProjectId })
+                    await showAlert(`已生成 ${result.imported} 条：${result.names.join('、')}`, 'AI 一键生成设定')
+                    await loadLorebook(state.selectedProjectId)
+                  })}>AI 一键生成设定</button>
+                  <button onClick={() => void run(async () => {
+                    const genre = await askPrompt('题材（如玄幻/仙侠/都市）', '玄幻')
+                    const topic = await askPrompt('选题方向（可留空）', '')
+                    if (genre) { const result = await call('agent:marketResearch', { genre, topic: topic ?? undefined }); await showAlert(result.report, '市场调研报告') }
+                  })}>市场调研</button>
+                </div>
+              </div>
+              <div className="panel-section">
+                <div className="section-title">世界书分组</div>
+                {state.lorebook?.groups.map((g) => (
+                  <div className="row" key={g.id}>
+                    <div className="row-main">
+                      <strong>{g.name}</strong>
+                      <span className="muted">{g.entry_ids.length} 条 · {g.enabled ? '启用' : '停用'}</span>
+                    </div>
+                    <div className="row-actions">
+                      <button onClick={async () => { const name = await askPrompt('新分组名', g.name); if (name) { await call('lorebook:updateGroup', { id: g.id, name }); await loadLorebook(state.selectedProjectId ?? undefined) } }}>改名</button>
+                      <button onClick={() => void run(async () => { await call('lorebook:updateGroup', { id: g.id, enabled: !g.enabled }); await loadLorebook(state.selectedProjectId ?? undefined) })}>{g.enabled ? '停用' : '启用'}</button>
+                      <button onClick={async () => { const confirm = await askPrompt('删除分组？输入 yes 确认'); if (confirm === 'yes') { await call('lorebook:deleteGroup', { id: g.id }); await loadLorebook(state.selectedProjectId ?? undefined) } }}>删</button>
+                    </div>
+                  </div>
+                ))}
+                {state.lorebook?.groups.length === 0 && <div className="empty">暂无分组</div>}
+                <button className="full-btn" onClick={async () => {
+                  const name = await askPrompt('新分组名称')
+                  if (name) { await call('lorebook:createGroup', { name }); await loadLorebook(state.selectedProjectId ?? undefined) }
+                }}>＋ 新建分组</button>
+              </div>
+              <div className="panel-section">
                 <div className="section-title">世界书条目</div>
                 {state.lorebook?.entries.map((entry) => (
                   <div className="row" key={entry.id}>

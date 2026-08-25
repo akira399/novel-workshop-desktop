@@ -285,6 +285,10 @@ async function dispatch<K extends CommandName>(command: K, payload: CommandReque
       }
       case 'lorebook:exportSillyTavern':
         return { ok: true, value: (await ws!.exportLorebookSillyTavern()) as CommandResponse<K> }
+      case 'lorebook:autogen': {
+        const req = payload as { bookId: string }
+        return { ok: true, value: (await agentService!.autogenLorebook(req.bookId)) as CommandResponse<K> }
+      }
       case 'lorebook:listGroups':
         return { ok: true, value: (await ws!.listLorebookGroups()) as CommandResponse<K> }
       case 'lorebook:createGroup': {
@@ -467,6 +471,10 @@ async function dispatch<K extends CommandName>(command: K, payload: CommandReque
       case 'agent:applyAdvice': {
         const req = payload as { text: string; advice: string }
         return { ok: true, value: (await agentService!.applyAdvice(req.text, req.advice)) as CommandResponse<K> }
+      }
+      case 'agent:marketResearch': {
+        const req = payload as { genre: string; topic?: string }
+        return { ok: true, value: (await agentService!.marketResearch(req.genre, req.topic ?? '')) as CommandResponse<K> }
       }
       case 'settings:get': {
         const settings = await loadSettings()
