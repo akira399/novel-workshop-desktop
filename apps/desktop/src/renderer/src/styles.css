@@ -147,3 +147,9 @@ button:disabled { opacity: .4; cursor: default; }
 .model-form-head { display: flex; justify-content: space-between; align-items: center; }
 .model-form-head h4 { margin: 0; }
 .active-badge { display: inline-block; margin-left: 6px; font-size: 11px; color: #fff; background: #111; border-radius: 4px; padding: 0 5px; }
+
+.settings-section { margin-bottom: 16px; }
+.settings-section h4 { margin: 0 0 8px; }
+.settings-section label { display: block; margin-bottom: 8px; font-size: 13px; color: #666; }
+.settings-section input, .settings-section select { display: block; width: 100%; margin-top: 4px; padding: 6px 8px; background: #fff; color: #111; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; }
+.settings-section select[multiple] { height: auto; }

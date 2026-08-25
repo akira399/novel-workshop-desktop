@@ -79,6 +79,7 @@ interface UiState {
   batchBaseUrl: string
   batchApiKey: string
   batchModelNames: string
+  selectedRemoteModels: string[]
   promptRequest: PromptRequest | null
   alertRequest: AlertRequest | null
   polishPreview: { original: string; polished: string; suggestions: PolishSuggestion[] } | null
@@ -93,7 +94,7 @@ const initialUi: UiState = {
   undoStack: [], redoStack: [], findOpen: false, findText: '', replaceText: '', fontSize: 16,
   view: 'projects', lorebook: null, library: [], models: [], modelDraft: emptyModel,
   showSettings: false, reader: null, remoteModels: [], fetchingModels: false, chatMessages: [], chatInput: '', chatBusy: false, activeModelId: null,
-  batchProvider: 'deepseek', batchBaseUrl: 'https://api.deepseek.com', batchApiKey: '', batchModelNames: '',
+  batchProvider: 'deepseek', batchBaseUrl: 'https://api.deepseek.com', batchApiKey: '', batchModelNames: '', selectedRemoteModels: [],
   promptRequest: null, alertRequest: null, polishPreview: null, error: null, notice: null, busy: false,
 }
 
@@ -460,19 +461,20 @@ export function App(): JSX.Element {
   }, [run, showAlert])
 
   const fetchRemoteModels = useCallback(() => {
-    const draft = state.modelDraft
-    if (!draft.provider) return
-    patch({ fetchingModels: true, remoteModels: [] })
+    const provider = state.batchProvider
+    if (!provider) return
+    patch({ fetchingModels: true, remoteModels: [], selectedRemoteModels: [] })
     void run(async () => {
-      const result = await call('models:fetch', { provider: draft.provider, baseUrl: draft.baseUrl, apiKey: draft.apiKey })
+      const result = await call('models:fetch', { provider, baseUrl: state.batchBaseUrl, apiKey: state.batchApiKey })
       patch({ remoteModels: result.models, fetchingModels: false })
       if (result.error) await showAlert(result.error, '获取模型列表失败')
-      else await showAlert(`获取到 ${result.models.length} 个模型，可在下方选择。`, '模型列表')
+      else await showAlert(`获取到 ${result.models.length} 个模型，按住 Ctrl/Shift 可多选。`, '模型列表')
     })
-  }, [run, state.modelDraft, showAlert])
+  }, [run, state.batchProvider, state.batchBaseUrl, state.batchApiKey, showAlert])
 
   const saveBatchModels = useCallback(() => {
-    const names = state.batchModelNames.split(/[\n,，]/).map((s) => s.trim()).filter(Boolean)
+    const manual = state.batchModelNames.split(/[\n,，]/).map((s) => s.trim()).filter(Boolean)
+    const names = Array.from(new Set([...state.selectedRemoteModels, ...manual]))
     if (names.length === 0) return
     const providerLabel = PROVIDER_PRESETS.find((p) => p.id === state.batchProvider)?.label ?? state.batchProvider
     void run(async () => {
@@ -493,10 +495,10 @@ export function App(): JSX.Element {
         if (!firstId) firstId = profile.id
       }
       const models = await call('models:list', undefined)
-      patch((prev) => ({ models, modelDraft: emptyModel, batchModelNames: '', activeModelId: prev.activeModelId ?? firstId }))
-      await showAlert(`已批量保存 ${names.length} 个模型`, '模型添加完成')
+      patch((prev) => ({ models, modelDraft: emptyModel, batchModelNames: '', selectedRemoteModels: [], activeModelId: prev.activeModelId ?? firstId }))
+      await showAlert(`已保存 ${names.length} 个模型`, '模型添加完成')
     })
-  }, [run, state.batchProvider, state.batchBaseUrl, state.batchApiKey, state.batchModelNames, showAlert])
+  }, [run, state.batchProvider, state.batchBaseUrl, state.batchApiKey, state.batchModelNames, state.selectedRemoteModels, showAlert])
 
   const openReader = useCallback(() => {
     void run(async () => {
@@ -929,76 +931,60 @@ export function App(): JSX.Element {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-head"><strong>模型设置</strong><button onClick={() => patch({ showSettings: false })}>关闭</button></div>
             <div className="modal-body">
-              {state.models.map((m) => (
-                <div className="model-item" key={m.id}>
-                  <div>
-                    <strong>{m.name}</strong> {state.activeModelId === m.id && <span className="active-badge">当前</span>}
-                    <span className="muted">{m.provider} · {m.model}</span>
+              <div className="settings-section">
+                <h4>已保存模型</h4>
+                {state.models.map((m) => (
+                  <div className="model-item" key={m.id}>
+                    <div>
+                      <strong>{m.name}</strong> {state.activeModelId === m.id && <span className="active-badge">当前</span>}
+                      <span className="muted">{m.provider} · {m.model}</span>
+                    </div>
+                    <span>
+                      <button onClick={() => patch({ activeModelId: m.id })}>设为当前</button>
+                      <button onClick={() => testModel(m.id)}>测试</button>
+                      <button onClick={() => deleteModel(m.id)}>删除</button>
+                    </span>
                   </div>
-                  <span>
-                    <button onClick={() => patch({ activeModelId: m.id })}>设为当前</button>
-                    <button onClick={() => patch({ modelDraft: m })}>编辑</button>
-                    <button onClick={() => testModel(m.id)}>测试</button>
-                    <button onClick={() => deleteModel(m.id)}>删除</button>
-                  </span>
-                </div>
-              ))}
-              {state.models.length === 0 && <div className="empty">还没有模型，添加一个即可开始 AI 创作</div>}
-              <div className="batch-form">
-                <h4>批量添加模型（同一提供方多个模型）</h4>
+                ))}
+                {state.models.length === 0 && <div className="empty">还没有模型，在下方添加</div>}
+              </div>
+
+              <div className="settings-section">
+                <h4>添加模型</h4>
                 <label>提供方
                   <select value={state.batchProvider} onChange={(e) => {
                     const provider = e.target.value as ModelProfile['provider']
                     const preset = PROVIDER_PRESETS.find((p) => p.id === provider)
                     patch({ batchProvider: provider, ...(preset ? { batchBaseUrl: preset.baseUrl } : {}) })
                   }}>
-                    {PROVIDER_PRESETS.filter((p) => p.id !== 'custom').map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+                    {PROVIDER_PRESETS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
                   </select>
                 </label>
                 <label>Base URL<input value={state.batchBaseUrl} onChange={(e) => patch({ batchBaseUrl: e.target.value })} /></label>
                 <label>API Key<input type="password" value={state.batchApiKey} onChange={(e) => patch({ batchApiKey: e.target.value })} /></label>
-                <label>模型名（每行一个）
-                  <textarea rows={4} value={state.batchModelNames} onChange={(e) => patch({ batchModelNames: e.target.value })} placeholder={'deepseek-chat\ndeepseek-reasoner'} />
-                </label>
-                <button onClick={saveBatchModels} disabled={state.busy || state.batchModelNames.trim().split(/[\n,，]/).filter(Boolean).length === 0}>批量保存模型</button>
-              </div>
-              <div className="model-form">
-                <div className="model-form-head">
-                  <h4>{state.modelDraft.id ? '编辑模型' : '新增模型'}</h4>
-                  <button onClick={() => patch({ modelDraft: emptyModel })}>＋ 新增单个模型</button>
-                </div>
-                <label>名称<input value={state.modelDraft.name} onChange={(e) => patch({ modelDraft: { ...state.modelDraft, name: e.target.value } })} placeholder="如：我的 DeepSeek" /></label>
-                <label>提供方
-                  <select value={state.modelDraft.provider} onChange={(e) => {
-                    const provider = e.target.value as ModelProfile['provider']
-                    const preset = PROVIDER_PRESETS.find((p) => p.id === provider)
-                    patch({ modelDraft: { ...state.modelDraft, provider, ...(preset ? { baseUrl: preset.baseUrl } : {}) } })
-                  }}>
-                    {PROVIDER_PRESETS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-                  </select>
-                </label>
-                <label>Base URL<input value={state.modelDraft.baseUrl ?? ''} onChange={(e) => patch({ modelDraft: { ...state.modelDraft, baseUrl: e.target.value } })} placeholder="https://api.example.com/v1" /></label>
-                <label>API Key<input type="password" value={state.modelDraft.apiKey ?? ''} onChange={(e) => patch({ modelDraft: { ...state.modelDraft, apiKey: e.target.value } })} placeholder="sk-..." /></label>
                 <div className="model-fetch-row">
-                  <button onClick={fetchRemoteModels} disabled={state.fetchingModels || !state.modelDraft.apiKey || state.modelDraft.provider === 'custom'}>自动获取模型列表</button>
-                  {state.fetchingModels && <span className="muted">获取中…</span>}
+                  <button onClick={fetchRemoteModels} disabled={state.fetchingModels || !state.batchApiKey}>自动获取模型列表</button>
+                  <span className="muted">获取后可按住 Ctrl/Shift 多选</span>
                 </div>
-                <label>模型名
-                  <input list="remote-models" value={state.modelDraft.model} onChange={(e) => patch({ modelDraft: { ...state.modelDraft, model: e.target.value } })} placeholder="deepseek-chat / gpt-4o / claude-..." />
+                {state.remoteModels.length > 0 && (
+                  <label>选择模型（可多选）
+                    <select
+                      multiple
+                      size={6}
+                      value={state.selectedRemoteModels}
+                      onChange={(e) => {
+                        const values = Array.from(e.target.selectedOptions, (o) => o.value)
+                        patch({ selectedRemoteModels: values })
+                      }}
+                    >
+                      {state.remoteModels.map((m) => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </label>
+                )}
+                <label>或手动输入模型名（逗号分隔）
+                  <input value={state.batchModelNames} onChange={(e) => patch({ batchModelNames: e.target.value })} placeholder="deepseek-chat, deepseek-reasoner" />
                 </label>
-                {state.remoteModels.length > 0 && (
-                  <datalist id="remote-models">
-                    {state.remoteModels.map((m) => <option key={m} value={m} />)}
-                  </datalist>
-                )}
-                {state.remoteModels.length > 0 && (
-                  <div className="remote-model-list">
-                    {state.remoteModels.slice(0, 30).map((m) => (
-                      <button key={m} onClick={() => patch({ modelDraft: { ...state.modelDraft, model: m } })}>{m}</button>
-                    ))}
-                  </div>
-                )}
-                <button onClick={() => { const draft = { ...state.modelDraft, id: state.modelDraft.id || `model_${Date.now().toString(36)}` }; saveModel(draft) }} disabled={state.busy || !state.modelDraft.name.trim() || !state.modelDraft.model.trim()}>保存模型</button>
+                <button onClick={saveBatchModels} disabled={state.busy || (state.selectedRemoteModels.length + state.batchModelNames.trim().split(/[\n,，]/).filter(Boolean).length) === 0}>保存所选模型</button>
               </div>
             </div>
           </div>
