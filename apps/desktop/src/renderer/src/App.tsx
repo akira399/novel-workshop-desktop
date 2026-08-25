@@ -539,12 +539,18 @@ export function App(): JSX.Element {
   return (
     <div className="app">
       <header className="topbar">
+        <div className="topbar-drag" />
         <div className="brand"><strong>大肥鱼的小说工坊</strong><span className="version">{state.info?.version ?? '…'}</span></div>
         <div className="top-actions">
           <span className="path">{state.workspace?.path ?? '未选择工作区'}</span>
           <button onClick={() => void run(async () => { const path = await call('workspace:choose', undefined); if (path) await refreshWorkspace() })}>选择工作区</button>
           <button onClick={openReader}>本地阅读</button>
           <button onClick={openSettings}>模型设置</button>
+        </div>
+        <div className="window-controls">
+          <button className="win-btn" onClick={() => window.novelWorkshop.minimize()} title="最小化">─</button>
+          <button className="win-btn" onClick={() => window.novelWorkshop.maximize()} title="最大化">□</button>
+          <button className="win-btn win-close" onClick={() => window.novelWorkshop.close()} title="关闭">✕</button>
         </div>
       </header>
 

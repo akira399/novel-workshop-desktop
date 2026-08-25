@@ -7,6 +7,9 @@ import type { CommandMap, CommandName, CommandRequest, CommandResponse, IpcResul
 export interface NovelWorkshopApi {
   invoke<K extends CommandName>(command: K, payload: CommandRequest<K>): Promise<IpcResult<CommandResponse<K>>>
   on<K extends CommandName>(command: K, listener: (payload: CommandResponse<K>) => void): () => void
+  minimize(): void
+  maximize(): void
+  close(): void
 }
 
 const api: NovelWorkshopApi = {
@@ -17,6 +20,9 @@ const api: NovelWorkshopApi = {
     ipcRenderer.on(channel, wrapped)
     return () => ipcRenderer.removeListener(channel, wrapped)
   },
+  minimize: () => ipcRenderer.send('window:minimize'),
+  maximize: () => ipcRenderer.send('window:maximize'),
+  close: () => ipcRenderer.send('window:close'),
 }
 
 contextBridge.exposeInMainWorld('novelWorkshop', api)

@@ -53,10 +53,14 @@ body {
 /* ── 顶栏 ── */
 .topbar {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 0 20px; background: var(--surface); height: 52px; flex: 0 0 auto;
+  padding: 0 12px; background: var(--surface); height: 48px; flex: 0 0 auto;
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
   position: relative; z-index: 10;
+  -webkit-app-region: drag;
+}
+.topbar button, .topbar input, .topbar select {
+  -webkit-app-region: no-drag;
 }
 .brand { display: flex; align-items: center; gap: 10px; }
 .brand strong {
@@ -108,6 +112,16 @@ button:disabled:hover { background: var(--surface); border-color: var(--border);
   background: var(--accent-soft); border-color: transparent;
   color: var(--text); box-shadow: none; transform: none;
 }
+
+.topbar-drag { flex: 1; -webkit-app-region: drag; }
+.window-controls { display: flex; align-items: center; gap: 2px; margin-left: 8px; }
+.win-btn {
+  width: 36px; height: 28px; display: flex; align-items: center; justify-content: center;
+  border: none; background: transparent; color: var(--text-secondary);
+  font-size: 14px; border-radius: 6px; padding: 0; box-shadow: none;
+}
+.win-btn:hover { background: var(--accent-soft); color: var(--text); box-shadow: none; transform: none; }
+.win-close:hover { background: #dc2626; color: #fff; }
 
 /* ── 通知条 ── */
 .error-bar {

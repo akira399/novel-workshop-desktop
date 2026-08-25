@@ -58,6 +58,7 @@ function createWindow(): void {
     minHeight: 640,
     title: APP_NAME,
     show: false,
+    frame: false,
     autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -541,6 +542,13 @@ async function bootstrap(): Promise<void> {
   ipcMain.handle('novel:invoke', async (_event, command: string, payload: unknown) => {
     return dispatch(command as CommandName, payload as never)
   })
+
+  ipcMain.on('window:minimize', () => mainWindow?.minimize())
+  ipcMain.on('window:maximize', () => {
+    if (mainWindow?.isMaximized()) mainWindow.unmaximize()
+    else mainWindow?.maximize()
+  })
+  ipcMain.on('window:close', () => mainWindow?.close())
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
