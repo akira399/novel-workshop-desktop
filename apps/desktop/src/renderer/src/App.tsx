@@ -194,7 +194,7 @@ export function App(): JSX.Element {
     void run(async () => {
       const result = await call('projects:importFile', undefined)
       if (!result) return
-      await showAlert(`已导入《${result.title}》：${result.chapterCount} 章 / ${result.totalWords} 字`)
+      void showAlert(`已导入《${result.title}》：${result.chapterCount} 章 / ${result.totalWords} 字`)
       await refreshWorkspace()
       await loadProject(result.bookId)
     })
@@ -376,7 +376,7 @@ export function App(): JSX.Element {
     void run(async () => {
       const report = await call('chapters:validate', { projectId, chapterNo, title: editorTitle, text: editorText })
       const summary = report.issues.map((i) => `[${i.level}] ${i.message}`).join('\n') || '校验通过，无问题'
-      await showAlert(summary, `校验结果：${report.passed ? '通过' : '未通过'}`)
+      void showAlert(summary, `校验结果：${report.passed ? '通过' : '未通过'}`)
     })
   }, [run, state.selectedProjectId, state.selectedChapterNo, state.editorTitle, state.editorText])
 
@@ -386,7 +386,7 @@ export function App(): JSX.Element {
     const chapterStart = state.selectedChapterNo ?? 1
     void run(async () => {
       const report = await call('chapters:diagnose', { projectId, chapterStart, count: 3 })
-      await showAlert(report.issues.slice(0, 10).map((i) => `[${i.severity}] ${i.advice}`).join('\n'), `黄金三章诊断：${report.score}/100`)
+      void showAlert(report.issues.slice(0, 10).map((i) => `[${i.severity}] ${i.advice}`).join('\n'), `黄金三章诊断：${report.score}/100`)
     })
   }, [run, state.selectedProjectId, state.selectedChapterNo])
 
@@ -397,7 +397,7 @@ export function App(): JSX.Element {
     if (!format || !['txt', 'markdown', 'platform'].includes(format)) return
     await run(async () => {
       const result = await call('chapters:exportToFile', { projectId, format: format as 'txt' | 'markdown' | 'platform' })
-      if (result.path) await showAlert(`已导出到：${result.path}`)
+      if (result.path) void showAlert(`已导出到：${result.path}`)
     })
   }, [run, askPrompt, state.selectedProjectId, showAlert])
 
@@ -408,7 +408,7 @@ export function App(): JSX.Element {
     if (!format || !['epub', 'pdf', 'docx'].includes(format)) return
     await run(async () => {
       const result = await call('export:file', { projectId, format: format as 'epub' | 'pdf' | 'docx' })
-      if (result.path) await showAlert(`已导出到：${result.path}`)
+      if (result.path) void showAlert(`已导出到：${result.path}`)
     })
   }, [run, askPrompt, state.selectedProjectId, showAlert])
 
@@ -462,14 +462,14 @@ export function App(): JSX.Element {
       const saved = await call('models:save', { profile })
       const models = await call('models:list', undefined)
       patch((prev) => ({ models, modelDraft: emptyModel, activeModelId: prev.activeModelId ?? saved.id }))
-      await showAlert(`模型「${saved.name}」已保存`)
+      void showAlert(`模型「${saved.name}」已保存`)
     })
   }, [run, showAlert])
   const deleteModel = useCallback((id: string) => {
     void run(async () => { await call('models:delete', { id }); const models = await call('models:list', undefined); patch((prev) => ({ models, activeModelId: prev.activeModelId === id ? models[0]?.id ?? null : prev.activeModelId })) })
   }, [run])
   const testModel = useCallback((id: string) => {
-    void run(async () => { const result = await call('models:test', { id }); await showAlert(result.message) })
+    void run(async () => { const result = await call('models:test', { id }); void showAlert(result.message) })
   }, [run, showAlert])
 
   const fetchRemoteModels = useCallback(() => {
@@ -479,8 +479,8 @@ export function App(): JSX.Element {
     void run(async () => {
       const result = await call('models:fetch', { provider, baseUrl: state.batchBaseUrl, apiKey: state.batchApiKey })
       patch({ remoteModels: result.models, fetchingModels: false })
-      if (result.error) await showAlert(result.error, '获取模型列表失败')
-      else await showAlert(`获取到 ${result.models.length} 个模型，按住 Ctrl/Shift 可多选。`, '模型列表')
+      if (result.error) void showAlert(result.error, '获取模型列表失败')
+      else void showAlert(`获取到 ${result.models.length} 个模型，按住 Ctrl/Shift 可多选。`, '模型列表')
     })
   }, [run, state.batchProvider, state.batchBaseUrl, state.batchApiKey, showAlert])
 
@@ -508,7 +508,7 @@ export function App(): JSX.Element {
       }
       const models = await call('models:list', undefined)
       patch((prev) => ({ models, modelDraft: emptyModel, batchModelNames: '', selectedRemoteModels: [], activeModelId: prev.activeModelId ?? firstId }))
-      await showAlert(`已保存 ${names.length} 个模型`, '模型添加完成')
+      void showAlert(`已保存 ${names.length} 个模型`, '模型添加完成')
     })
   }, [run, state.batchProvider, state.batchBaseUrl, state.batchApiKey, state.batchModelNames, state.selectedRemoteModels, showAlert])
 
@@ -516,7 +516,7 @@ export function App(): JSX.Element {
     void run(async () => {
       const result = await call('reader:open', undefined)
       if (!result.path) return
-      if (result.openedExternal) { await showAlert(`已用系统默认程序打开：${result.path}`); return }
+      if (result.openedExternal) { void showAlert(`已用系统默认程序打开：${result.path}`); return }
       patch({ reader: { path: result.path, ext: result.ext, text: result.text } })
     })
   }, [run, showAlert])
@@ -578,7 +578,7 @@ export function App(): JSX.Element {
             <button className={state.view === 'projects' ? 'active' : ''} onClick={() => patch({ view: 'projects' })}>项目</button>
             <button className={state.view === 'lorebook' ? 'active' : ''} onClick={() => patch({ view: 'lorebook' })}>世界书</button>
             <span className="spacer" />
-            <button onClick={() => void run(async () => { const r = await call('projects:importDemo', undefined); await showAlert(`示例《青云问道》已导入（${r.imported} 条世界书）`); await refreshWorkspace(); await loadProject(r.bookId) })}>示例</button>
+            <button onClick={() => void run(async () => { const r = await call('projects:importDemo', undefined); void showAlert(`示例《青云问道》已导入（${r.imported} 条世界书）`); await refreshWorkspace(); await loadProject(r.bookId) })}>示例</button>
             <button onClick={importFile}>导入</button>
             <button onClick={() => void createProject()}>＋</button>
           </div>
@@ -591,13 +591,13 @@ export function App(): JSX.Element {
                   <button disabled={!state.selectedProjectId} onClick={() => void run(async () => {
                     if (!state.selectedProjectId) return
                     const result = await call('lorebook:autogen', { bookId: state.selectedProjectId })
-                    await showAlert(`已生成 ${result.imported} 条：${result.names.join('、')}`, 'AI 一键生成设定')
+                    void showAlert(`已生成 ${result.imported} 条：${result.names.join('、')}`, 'AI 一键生成设定')
                     await loadLorebook(state.selectedProjectId)
                   })}>AI 一键生成设定</button>
                   <button onClick={() => void run(async () => {
                     const genre = await askPrompt('题材（如玄幻/仙侠/都市）', '玄幻')
                     const topic = await askPrompt('选题方向（可留空）', '')
-                    if (genre) { const result = await call('agent:marketResearch', { genre, topic: topic ?? undefined }); await showAlert(result.report, '市场调研报告') }
+                    if (genre) { const result = await call('agent:marketResearch', { genre, topic: topic ?? undefined }); void showAlert(result.report, '市场调研报告') }
                   })}>市场调研</button>
                 </div>
               </div>
@@ -660,10 +660,10 @@ export function App(): JSX.Element {
                 <div className="action-grid">
                   <button onClick={() => selectedBook && loadChapter(selectedBook.id, Math.max(1, (state.selectedChapterNo ?? 1) - 1))}>上一章</button>
                   <button onClick={() => selectedBook && loadChapter(selectedBook.id, (state.selectedChapterNo ?? 1) + 1)}>下一章</button>
-                  <button onClick={writeChapterAI} disabled={state.generating === 'write' || state.busy}>
+                  <button onClick={writeChapterAI} disabled={state.generating === 'write'}>
                     {state.generating === 'write' ? <><span className="spinner" /> 生成中…</> : 'AI 写章'}
                   </button>
-                  <button onClick={polishAI} disabled={state.generating === 'polish' || state.busy}>
+                  <button onClick={polishAI} disabled={state.generating === 'polish'}>
                     {state.generating === 'polish' ? <><span className="spinner" /> 润色中…</> : '一键润色'}
                   </button>
                   <button onClick={depolishAI}>去 AI 味</button>
@@ -687,18 +687,18 @@ export function App(): JSX.Element {
                     const artifact = await askPrompt('阶段产物全文')
                     if (phase && artifact && state.selectedProjectId) {
                       const book = await call('projects:commit', { projectId: state.selectedProjectId, phase: phase as never, artifact })
-                      await showAlert(`已提交：${book.currentPhase}`, '阶段提交')
+                      void showAlert(`已提交：${book.currentPhase}`, '阶段提交')
                     }
                   })}>提交阶段</button>
                   <button onClick={() => void run(async () => {
                     if (!state.selectedProjectId) return
                     const audit = await call('projects:audit', { projectId: state.selectedProjectId })
-                    await showAlert(audit.map((a) => `${a.at} ${a.action} ${a.phase} ${a.detail}`).join('\n') || '暂无审计', '项目审计')
+                    void showAlert(audit.map((a) => `${a.at} ${a.action} ${a.phase} ${a.detail}`).join('\n') || '暂无审计', '项目审计')
                   })}>审计日志</button>
                   <button onClick={() => void run(async () => {
                     if (!state.selectedProjectId) return
                     const sourceId = await askPrompt('源项目 ID')
-                    if (sourceId) { const book = await call('projects:clone', { sourceId }); await showAlert(`已克隆：${book.title}`, '克隆项目'); await refreshWorkspace() }
+                    if (sourceId) { const book = await call('projects:clone', { sourceId }); void showAlert(`已克隆：${book.title}`, '克隆项目'); await refreshWorkspace() }
                   })}>克隆项目</button>
                   <button onClick={() => void run(async () => {
                     if (!state.selectedProjectId) return
@@ -712,16 +712,16 @@ export function App(): JSX.Element {
                   })}>AI 修订</button>
                   <button onClick={() => void run(async () => {
                     const stats = await call('chapters:wordcount', { text: state.editorText })
-                    await showAlert(`总字符 ${stats.totalChars} · 中文 ${stats.cjkChars} · 段落 ${stats.paragraphs} · 对话占比 ${Math.round(stats.dialogueRatio * 100)}%`, '字数统计')
+                    void showAlert(`总字符 ${stats.totalChars} · 中文 ${stats.cjkChars} · 段落 ${stats.paragraphs} · 对话占比 ${Math.round(stats.dialogueRatio * 100)}%`, '字数统计')
                   })}>字数统计</button>
                   <button onClick={() => void run(async () => {
                     const lib = await call('prompts:list', undefined)
-                    await showAlert(lib.map((p) => `${p.id} · ${p.name}`).join('\n') || '无模板', '提示词库')
+                    void showAlert(lib.map((p) => `${p.id} · ${p.name}`).join('\n') || '无模板', '提示词库')
                   })}>提示词库</button>
                   <button onClick={() => void run(async () => {
                     if (!state.selectedProjectId) return
                     const items = await call('extras:foreshadows', { projectId: state.selectedProjectId })
-                    await showAlert(items.map((f) => `[${f.status}] ${f.content} @${f.plantChapter}`).join('\n') || '无伏笔', '伏笔')
+                    void showAlert(items.map((f) => `[${f.status}] ${f.content} @${f.plantChapter}`).join('\n') || '无伏笔', '伏笔')
                   })}>伏笔列表</button>
                   <button onClick={() => void run(async () => {
                     if (!state.selectedProjectId) return
@@ -732,7 +732,7 @@ export function App(): JSX.Element {
                   <button onClick={() => void run(async () => {
                     if (!state.selectedProjectId) return
                     const items = await call('extras:glossary', { projectId: state.selectedProjectId })
-                    await showAlert(items.map((g) => `${g.term}：${g.definition}`).join('\n') || '无术语', '术语表')
+                    void showAlert(items.map((g) => `${g.term}：${g.definition}`).join('\n') || '无术语', '术语表')
                   })}>术语表</button>
                   <button onClick={() => void run(async () => {
                     if (!state.selectedProjectId) return
@@ -743,7 +743,7 @@ export function App(): JSX.Element {
                   <button onClick={() => void run(async () => {
                     if (!state.selectedProjectId) return
                     const items = await call('extras:ideas', { projectId: state.selectedProjectId })
-                    await showAlert(items.map((i) => i.content).join('\n') || '无灵感', '灵感库')
+                    void showAlert(items.map((i) => i.content).join('\n') || '无灵感', '灵感库')
                   })}>灵感列表</button>
                   <button onClick={() => void run(async () => {
                     if (!state.selectedProjectId) return
@@ -753,12 +753,12 @@ export function App(): JSX.Element {
                   <button onClick={() => void run(async () => {
                     if (!state.selectedProjectId) return
                     const entries = await call('extras:ledger', { projectId: state.selectedProjectId })
-                    await showAlert(entries.map((e) => `${e.entity}.${e.field} = ${e.value} @ch${e.chapterNo}`).join('\n') || '无账本', '事实账本')
+                    void showAlert(entries.map((e) => `${e.entity}.${e.field} = ${e.value} @ch${e.chapterNo}`).join('\n') || '无账本', '事实账本')
                   })}>事实账本</button>
                   <button onClick={() => void run(async () => {
                     if (!state.selectedProjectId) return
                     const events = await call('extras:timeline', { projectId: state.selectedProjectId })
-                    await showAlert(events.map((e) => `ch${e.chapterNo} ${e.bookTime} ${e.event}`).join('\n') || '无时间线', '时间线')
+                    void showAlert(events.map((e) => `ch${e.chapterNo} ${e.bookTime} ${e.event}`).join('\n') || '无时间线', '时间线')
                   })}>时间线</button>
                   <button onClick={() => void run(async () => {
                     if (!state.selectedProjectId) return
@@ -768,12 +768,12 @@ export function App(): JSX.Element {
                       ...report.timelineIssues.map((t) => `时间线：${t.message}`),
                       ...report.sedimentSuggestions.map((s) => `沉淀建议：${s.entity}`),
                     ].join('\n') || '无异常'
-                    await showAlert(text, '一致性巡检')
+                    void showAlert(text, '一致性巡检')
                   })}>一致性巡检</button>
                   <button onClick={() => void run(async () => {
                     if (!state.selectedProjectId) return
                     const wizard = await call('guide:wizardStatus', { projectId: state.selectedProjectId })
-                    await showAlert(`当前步骤：${wizard.step}\n${Object.entries(wizard.status).map(([k, v]) => `${k}=${v}`).join('\n')}`, '创作向导')
+                    void showAlert(`当前步骤：${wizard.step}\n${Object.entries(wizard.status).map(([k, v]) => `${k}=${v}`).join('\n')}`, '创作向导')
                   })}>向导状态</button>
                   <button onClick={() => void run(async () => {
                     if (!state.selectedProjectId) return
@@ -783,15 +783,15 @@ export function App(): JSX.Element {
                   })}>提交向导</button>
                   <button onClick={() => void run(async () => {
                     const text = await askPrompt('输入自然语言指令')
-                    if (text) { const intent = await call('guide:parseIntent', { text }); await showAlert(intent ? `${intent.action}（置信度 ${intent.confidence}）` : '未命中意图', '意图解析') }
+                    if (text) { const intent = await call('guide:parseIntent', { text }); void showAlert(intent ? `${intent.action}（置信度 ${intent.confidence}）` : '未命中意图', '意图解析') }
                   })}>意图解析</button>
                   <button onClick={() => void run(async () => {
                     const result = await call('lorebook:exportSillyTavern', undefined)
-                    await showAlert(`已导出 ${result.count} 条到 SillyTavern 格式：\n\n${result.content.slice(0, 800)}`, '导出到酒馆')
+                    void showAlert(`已导出 ${result.count} 条到 SillyTavern 格式：\n\n${result.content.slice(0, 800)}`, '导出到酒馆')
                   })}>导出到酒馆</button>
                   <button onClick={() => void run(async () => {
                     const content = await askPrompt('粘贴世界书 JSON（Operit/SillyTavern/角色卡）')
-                    if (content && state.selectedProjectId) { const r = await call('lorebook:importJson', { content, bookId: state.selectedProjectId }); await showAlert(`导入 ${r.imported} 条`, '世界书导入'); await loadLorebook(state.selectedProjectId) }
+                    if (content && state.selectedProjectId) { const r = await call('lorebook:importJson', { content, bookId: state.selectedProjectId }); void showAlert(`导入 ${r.imported} 条`, '世界书导入'); await loadLorebook(state.selectedProjectId) }
                   })}>导入世界书</button>
                 </div>
               </div>
