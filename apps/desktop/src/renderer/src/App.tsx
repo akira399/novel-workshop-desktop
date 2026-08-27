@@ -83,6 +83,8 @@ interface UiState {
   promptRequest: PromptRequest | null
   alertRequest: AlertRequest | null
   polishPreview: { original: string; polished: string; suggestions: PolishSuggestion[] } | null
+  generating: 'write' | 'polish' | null
+  loreEditor: { mode: 'new' | 'edit'; entry?: LoreEntry } | null
   error: string | null
   notice: string | null
   busy: boolean
@@ -95,7 +97,7 @@ const initialUi: UiState = {
   view: 'projects', lorebook: null, library: [], models: [], modelDraft: emptyModel,
   showSettings: false, reader: null, remoteModels: [], fetchingModels: false, chatMessages: [], chatInput: '', chatBusy: false, activeModelId: null,
   batchProvider: 'deepseek', batchBaseUrl: 'https://api.deepseek.com', batchApiKey: '', batchModelNames: '', selectedRemoteModels: [],
-  promptRequest: null, alertRequest: null, polishPreview: null, error: null, notice: null, busy: false,
+  promptRequest: null, alertRequest: null, polishPreview: null, generating: null, loreEditor: null, error: null, notice: null, busy: false,
 }
 
 async function call<K extends keyof import('@dafuyu/contracts').CommandMap>(
@@ -272,22 +274,32 @@ export function App(): JSX.Element {
     const projectId = state.selectedProjectId
     const chapterNo = state.selectedChapterNo
     if (!projectId || !chapterNo) return
+    patch({ generating: 'write' })
     void run(async () => {
-      const result = await call('agent:writeChapter', { projectId, chapterNo })
-      setEditorText(result.text)
+      try {
+        const result = await call('agent:writeChapter', { projectId, chapterNo })
+        setEditorText(result.text)
+      } finally {
+        patch({ generating: null })
+      }
     }, 'AI 已生成章节')
-  }, [run, state.selectedProjectId, state.selectedChapterNo, setEditorText])
+  }, [run, state.selectedProjectId, state.selectedChapterNo, setEditorText, patch])
 
   const polishAI = useCallback(() => {
     const projectId = state.selectedProjectId
     const chapterNo = state.selectedChapterNo
     if (!projectId || !chapterNo) return
     const text = state.editorText
+    patch({ generating: 'polish' })
     void run(async () => {
-      const result = await call('agent:polish', { projectId, chapterNo, text })
-      const suggestions = splitPolishSuggestions(text, result.polished)
-      setEditorText(result.polished)
-      patch({ polishPreview: { original: text, polished: result.polished, suggestions } })
+      try {
+        const result = await call('agent:polish', { projectId, chapterNo, text })
+        const suggestions = splitPolishSuggestions(text, result.polished)
+        setEditorText(result.polished)
+        patch({ polishPreview: { original: text, polished: result.polished, suggestions } })
+      } finally {
+        patch({ generating: null })
+      }
     }, '润色完成，可逐条采纳')
   }, [run, state.selectedProjectId, state.selectedChapterNo, state.editorText, setEditorText, patch])
 
@@ -619,14 +631,7 @@ export function App(): JSX.Element {
                       <span className="muted">{entry.keywords.slice(0, 3).join('、')}{entry.always_active ? ' · 常驻' : ''}</span>
                     </div>
                     <div className="row-actions">
-                      <button onClick={async () => {
-                        const content = await askPrompt('条目内容', entry.content)
-                        const keywords = await askPrompt('关键词（逗号分隔）', entry.keywords.join('、'))
-                        const priority = await askPrompt('优先级 0-1000', String(entry.priority))
-                        if (content !== null && keywords !== null && priority !== null) {
-                          saveLoreEntry({ ...entry, content, keywords: keywords.split(/[,，]/).map((s) => s.trim()).filter(Boolean), priority: Math.max(0, Math.min(1000, Number(priority) || 50)) })
-                        }
-                      }}>改</button>
+                      <button onClick={() => patch({ loreEditor: { mode: 'edit', entry } })}>改</button>
                       <button onClick={() => deleteLoreEntry(entry.id)}>删</button>
                     </div>
                   </div>
@@ -634,23 +639,7 @@ export function App(): JSX.Element {
                 {state.lorebook?.entries.length === 0 && <div className="empty">暂无世界书条目</div>}
                 <button
                   className="full-btn"
-                  onClick={async () => {
-                    const name = await askPrompt('条目名称')
-                    const content = await askPrompt('条目内容')
-                    const keywords = await askPrompt('关键词（逗号分隔）', '')
-                    const priority = await askPrompt('优先级 0-1000', '50')
-                    const always = await askPrompt('常驻注入？输入 yes 表示常驻', '')
-                    if (name && content && state.selectedProjectId) {
-                      saveLoreEntry({
-                        id: `wb_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`, name, content,
-                        keywords: (keywords ?? '').split(/[,，]/).map((s) => s.trim()).filter(Boolean), is_regex: false, case_sensitive: false,
-                        always_active: always?.toLowerCase() === 'yes', enabled: true,
-                        priority: Math.max(0, Math.min(1000, Number(priority) || 50)), scan_depth: 0, inject_target: 'system', inject_position: 'append', insertion_depth: 0,
-                        book_id: state.selectedProjectId, volume_id: undefined, tags: [], version: 1,
-                        created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-                      })
-                    }
-                  }}
+                  onClick={() => patch({ loreEditor: { mode: 'new' } })}
                 >＋ 新建条目</button>
               </div>
             </div>
@@ -671,8 +660,12 @@ export function App(): JSX.Element {
                 <div className="action-grid">
                   <button onClick={() => selectedBook && loadChapter(selectedBook.id, Math.max(1, (state.selectedChapterNo ?? 1) - 1))}>上一章</button>
                   <button onClick={() => selectedBook && loadChapter(selectedBook.id, (state.selectedChapterNo ?? 1) + 1)}>下一章</button>
-                  <button onClick={writeChapterAI}>AI 写章</button>
-                  <button onClick={polishAI}>一键润色</button>
+                  <button onClick={writeChapterAI} disabled={state.generating === 'write' || state.busy}>
+                    {state.generating === 'write' ? <><span className="spinner" /> 生成中…</> : 'AI 写章'}
+                  </button>
+                  <button onClick={polishAI} disabled={state.generating === 'polish' || state.busy}>
+                    {state.generating === 'polish' ? <><span className="spinner" /> 润色中…</> : '一键润色'}
+                  </button>
                   <button onClick={depolishAI}>去 AI 味</button>
                   <button onClick={() => void styleConvertAI()}>文风</button>
                   <button onClick={validateAI}>校验</button>
@@ -840,6 +833,11 @@ export function App(): JSX.Element {
         </aside>
 
         <main className="editor">
+          {state.generating && (
+            <div className="generating-bar">
+              <div className="generating-progress" />
+            </div>
+          )}
           {state.selectedProjectId ? (
             <>
               <div className="editor-toolbar">
@@ -1011,6 +1009,16 @@ export function App(): JSX.Element {
         </div>
       )}
 
+      {state.loreEditor && (
+        <LoreEditorModal
+          mode={state.loreEditor.mode}
+          entry={state.loreEditor.entry}
+          defaultBookId={state.selectedProjectId ?? ''}
+          onSave={(entry) => { saveLoreEntry(entry); patch({ loreEditor: null }) }}
+          onClose={() => patch({ loreEditor: null })}
+        />
+      )}
+
       {promptRequest && (
         <PromptModal title={promptRequest.title} defaultValue={promptRequest.defaultValue}
           onConfirm={(value) => { promptRequest.resolve(value); patch({ promptRequest: null }) }}
@@ -1047,6 +1055,76 @@ function AlertModal(props: { title: string; message: string; onClose: () => void
         <div className="modal-head"><strong>{props.title}</strong><button onClick={props.onClose}>关闭</button></div>
         <div className="modal-body alert-body"><pre>{props.message}</pre></div>
         <div className="modal-actions"><button onClick={props.onClose}>确定</button></div>
+      </div>
+    </div>
+  )
+}
+
+function LoreEditorModal(props: { mode: 'new' | 'edit'; entry?: LoreEntry; defaultBookId: string; onSave: (entry: LoreEntry) => void; onClose: () => void }): JSX.Element {
+  const [name, setName] = useState(props.entry?.name ?? '')
+  const [content, setContent] = useState(props.entry?.content ?? '')
+  const [keywords, setKeywords] = useState(props.entry?.keywords.join('、') ?? '')
+  const [priority, setPriority] = useState(String(props.entry?.priority ?? 50))
+  const [always, setAlways] = useState(props.entry?.always_active ?? false)
+  const [enabled, setEnabled] = useState(props.entry?.enabled ?? true)
+
+  const save = (): void => {
+    if (!name.trim() || !content.trim()) return
+    const now = new Date().toISOString()
+    props.onSave({
+      id: props.entry?.id ?? `wb_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+      name: name.trim(),
+      content,
+      keywords: keywords.split(/[,，]/).map((s) => s.trim()).filter(Boolean),
+      is_regex: false,
+      case_sensitive: false,
+      always_active: always,
+      enabled,
+      priority: Math.max(0, Math.min(1000, Number(priority) || 50)),
+      scan_depth: 0,
+      inject_target: 'system',
+      inject_position: 'append',
+      insertion_depth: 0,
+      book_id: props.entry?.book_id ?? props.defaultBookId,
+      volume_id: undefined,
+      tags: props.entry?.tags ?? [],
+      version: props.entry?.version ?? 1,
+      created_at: props.entry?.created_at ?? now,
+      updated_at: now,
+    })
+  }
+
+  return (
+    <div className="modal-mask" onClick={props.onClose}>
+      <div className="modal lore-editor-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <strong>{props.mode === 'edit' ? `编辑世界书条目 · ${props.entry?.name}` : '新建世界书条目'}</strong>
+          <button onClick={props.onClose}>关闭</button>
+        </div>
+        <div className="modal-body">
+          <div className="settings-section">
+            <label>条目名称
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="如：林远" />
+            </label>
+            <label>触发关键词（逗号分隔）
+              <input value={keywords} onChange={(e) => setKeywords(e.target.value)} placeholder="林远,主角,青莲剑诀" />
+            </label>
+            <label>优先级（0-1000）
+              <input type="number" value={priority} onChange={(e) => setPriority(e.target.value)} />
+            </label>
+            <label>注入内容
+              <textarea rows={8} value={content} onChange={(e) => setContent(e.target.value)} placeholder="在这里输入世界书条目内容，可包含设定、人物、势力、境界等。" />
+            </label>
+            <div className="lore-check-row">
+              <label><input type="checkbox" checked={always} onChange={(e) => setAlways(e.target.checked)} /> 常驻注入</label>
+              <label><input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} /> 启用</label>
+            </div>
+          </div>
+          <div className="modal-actions">
+            <button onClick={props.onClose}>取消</button>
+            <button onClick={save} disabled={!name.trim() || !content.trim()}>保存条目</button>
+          </div>
+        </div>
       </div>
     </div>
   )
