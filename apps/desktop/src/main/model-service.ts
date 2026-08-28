@@ -105,8 +105,9 @@ export class ModelService {
     const started = Date.now()
     try {
       const result = await this.complete(profileId, [
+        { role: 'system', content: '你是连接测试助手。' },
         { role: 'user', content: '请回复“正常”两个字。' },
-      ], { maxTokens: 128 })
+      ], { maxTokens: 2048 })
       return { ok: true, message: `连通成功：${result.model}（${result.provider}）`, latencyMs: Date.now() - started }
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : String(error), latencyMs: Date.now() - started }

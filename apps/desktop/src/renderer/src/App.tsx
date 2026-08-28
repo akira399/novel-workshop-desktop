@@ -279,11 +279,14 @@ export function App(): JSX.Element {
       try {
         const result = await call('agent:writeChapter', { projectId, chapterNo, profileId: state.activeModelId ?? undefined })
         setEditorText(result.text)
+      } catch (error) {
+        void showAlert(error instanceof Error ? error.message : String(error), 'AI 写章失败')
+        throw error
       } finally {
         patch({ generating: null })
       }
     }, 'AI 已生成章节')
-  }, [run, state.selectedProjectId, state.selectedChapterNo, setEditorText, patch, state.activeModelId])
+  }, [run, state.selectedProjectId, state.selectedChapterNo, setEditorText, patch, state.activeModelId, showAlert])
 
   const polishAI = useCallback(() => {
     const projectId = state.selectedProjectId
@@ -297,11 +300,14 @@ export function App(): JSX.Element {
         const suggestions = splitPolishSuggestions(text, result.polished)
         setEditorText(result.polished)
         patch({ polishPreview: { original: text, polished: result.polished, suggestions } })
+      } catch (error) {
+        void showAlert(error instanceof Error ? error.message : String(error), '一键润色失败')
+        throw error
       } finally {
         patch({ generating: null })
       }
     }, '润色完成，可逐条采纳')
-  }, [run, state.selectedProjectId, state.selectedChapterNo, state.editorText, setEditorText, patch, state.activeModelId])
+  }, [run, state.selectedProjectId, state.selectedChapterNo, state.editorText, setEditorText, patch, state.activeModelId, showAlert])
 
   const togglePolish = useCallback((id: string) => {
     setState((prev) => {
