@@ -2,9 +2,9 @@
 
 > AI 小说创作工作台 · 独立 Windows 桌面软件
 
-「大肥鱼的小说工坊」是一款面向网文作者的**独立桌面创作软件**，不是插件、不依赖任何宿主环境。它把“选题构思、设定管理、章节写作、AI 润色、质量诊断、完整性检查、成稿导出”放进一个本地优先的工作台中，让作者可以专注于写作本身。
+「大肥鱼的小说工坊」是一款面向网文作者的 **AI 小说创作工作台**，提供完整的 Windows 桌面创作体验。它把“选题构思、设定管理、章节写作、AI 润色、质量诊断、完整性检查、成稿导出”放进一个本地优先的工作台中，让作者可以专注于写作本身。
 
-软件最初源于同名 DSH 插件（[dsh-novel-writer](https://github.com/akira399/dsh-novel-writer)），但桌面版已完全独立封装，保留并扩展了插件的全部核心能力，并以原生桌面应用的形式交付。
+软件与同名 DSH 插件同源，并在桌面端扩展为更完整的创作工作台。
 
 ---
 
@@ -173,8 +173,7 @@ pnpm --filter @dafuyu/desktop build:dir
 
 ## 🔗 关联项目
 
-- 同名 DSH 插件（旧版生态插件）：[dsh-novel-writer](https://github.com/akira399/dsh-novel-writer)
-- 桌面版是独立软件，插件只是本项目的前身与灵感来源。
+- 同名 DSH 插件：[dsh-novel-writer](https://github.com/akira399/dsh-novel-writer)
 
 ---
 
