@@ -545,23 +545,59 @@ export function App(): JSX.Element {
     if (!text || state.chatBusy) return
     const history: ChatMessage[] = [...state.chatMessages, { role: 'user', content: text }]
     const profileId = state.activeModelId ?? undefined
+    const currentText = state.editorText ?? ''
+    const currentTitle = state.editorTitle ?? ''
+    const contextText = currentText.length > 12000 ? `${currentText.slice(0, 12000)}\n…（正文过长，仅显示前 12000 字；如需全文请分段）` : currentText
+    const contextBlock = `【当前编辑上下文（实时同步）】\n章节标题：${currentTitle || '（未设置）'}\n正文：\n${contextText || '（空）'}`
+    const systemPrompt = [
+      '你是大肥鱼的小说工坊内置写作助手，运行在桌面小说创作软件中。',
+      '你可以读取用户当前正在编辑的正文（见下方【当前编辑上下文】），并直接修改上方编辑框。',
+      '',
+      '规则：',
+      '1. 如果用户要求“生成/修改/扩写/增加字数/重写/润色/删减”等涉及正文内容的任务，你必须基于上下文中的正文，输出修改后的【完整正文】，不得省略、不得只给建议。',
+      '2. 完整正文必须严格包裹在标记之间：',
+      '【编辑框结果】',
+      '<完整正文>',
+      '【结束】',
+      '3. 如果只是回答解释、写作建议、查世界书、诊断分析等，正常对话即可，不要使用上述标记。',
+      '4. “增加100字”“扩写”等指令必须实际修改正文并输出完整结果。',
+      '',
+      contextBlock,
+    ].join('\n')
     patch({ chatMessages: history, chatInput: '', chatBusy: true })
     void run(async () => {
       try {
         const result = await call('agent:complete', {
           profileId,
           messages: [
-            { role: 'system', content: '你是大肥鱼的小说工坊内置写作助手。你可以帮用户写章、润色、诊断、查世界书、管理项目等；请用中文简洁回答。' },
+            { role: 'system', content: systemPrompt },
             ...history,
           ],
-          maxTokens: 2000,
+          maxTokens: 4000,
         })
-        patch({ chatMessages: [...history, { role: 'assistant', content: result.text }] })
+        // 解析 AI 要写回编辑框的完整正文
+        const applyStart = '【编辑框结果】'
+        const applyEnd = '【结束】'
+        const startIdx = result.text.indexOf(applyStart)
+        const endIdx = startIdx >= 0 ? result.text.indexOf(applyEnd, startIdx + applyStart.length) : -1
+        let display = result.text
+        let applied: string | null = null
+        if (startIdx >= 0 && endIdx > startIdx) {
+          applied = result.text.slice(startIdx + applyStart.length, endIdx).trim()
+          const before = result.text.slice(0, startIdx).trim()
+          const after = result.text.slice(endIdx + applyEnd.length).trim()
+          display = [before, after].filter(Boolean).join('\n') || '✓ 已更新编辑框正文'
+        }
+        if (applied !== null) {
+          setEditorText(applied)
+          patch({ notice: 'AI 已更新编辑框正文' })
+        }
+        patch({ chatMessages: [...history, { role: 'assistant', content: display }] })
       } finally {
         patch({ chatBusy: false })
       }
     }, undefined)
-  }, [state.chatInput, state.chatMessages, state.chatBusy, state.activeModelId, run])
+  }, [state.chatInput, state.chatMessages, state.chatBusy, state.activeModelId, state.editorText, state.editorTitle, setEditorText, run])
 
   const selectedBook = state.book
   const promptRequest = state.promptRequest
