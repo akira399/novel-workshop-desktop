@@ -272,13 +272,18 @@ export function App(): JSX.Element {
 
   const writeChapterAI = useCallback(() => {
     const projectId = state.selectedProjectId
-    const chapterNo = state.selectedChapterNo
-    if (!projectId || !chapterNo) return
+    if (!projectId) return
+    const chapterNo = state.selectedChapterNo ?? 1
     patch({ generating: 'write' })
     void run(async () => {
       try {
         const result = await call('agent:writeChapter', { projectId, chapterNo, profileId: state.activeModelId ?? undefined })
         setEditorText(result.text)
+        patch({
+          selectedChapterNo: chapterNo,
+          chapter: state.chapter && state.chapter.chapter.no === chapterNo ? state.chapter : null,
+          editorTitle: state.editorTitle || `第 ${chapterNo} 章`,
+        })
       } catch (error) {
         void showAlert(error instanceof Error ? error.message : String(error), 'AI 写章失败')
         throw error
@@ -290,9 +295,17 @@ export function App(): JSX.Element {
 
   const polishAI = useCallback(() => {
     const projectId = state.selectedProjectId
+    if (!projectId) return
     const chapterNo = state.selectedChapterNo
-    if (!projectId || !chapterNo) return
+    if (!chapterNo) {
+      void showAlert('请先选择或打开一个章节后再润色', '提示')
+      return
+    }
     const text = state.editorText
+    if (!text.trim()) {
+      void showAlert('当前章节没有可润色的正文', '提示')
+      return
+    }
     patch({ generating: 'polish' })
     void run(async () => {
       try {
