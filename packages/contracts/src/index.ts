@@ -184,7 +184,7 @@ export interface CommandMap {
   'lorebook:deleteEntry': { request: { id: string }; response: void }
   'lorebook:importJson': { request: { content: string; bookId?: string }; response: { imported: number; warnings: string[] } }
   'lorebook:exportSillyTavern': { request: void; response: { content: string; count: number } }
-  'lorebook:autogen': { request: { bookId: string }; response: { imported: number; names: string[] } }
+  'lorebook:autogen': { request: { bookId: string; profileId?: string }; response: { imported: number; names: string[] } }
   'lorebook:listGroups': { request: void; response: LoreGroup[] }
   'lorebook:createGroup': { request: { name: string; entry_ids?: string[]; book_ids?: string[]; enabled?: boolean }; response: LoreGroup }
   'lorebook:updateGroup': { request: import('@dafuyu/core/lorebook').UpdateGroupParams; response: LoreGroup }
@@ -224,13 +224,13 @@ export interface CommandMap {
   'models:test': { request: { id: string }; response: { ok: boolean; message: string; latencyMs: number } }
   'models:fetch': { request: { provider: ModelProvider; baseUrl?: string; apiKey?: string }; response: { models: string[]; error?: string } }
   'agent:complete': { request: { profileId?: string; messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>; temperature?: number; maxTokens?: number }; response: { text: string; model: string; provider: string } }
-  'agent:writeChapter': { request: { projectId: string; chapterNo: number; brief?: string }; response: { text: string; model: string } }
-  'agent:polish': { request: { projectId: string; chapterNo: number; text?: string; instruction?: string }; response: { suggestions: PolishSuggestion[]; polished: string; model: string } }
-  'agent:depolish': { request: { text: string }; response: { text: string; model: string } }
-  'agent:styleConvert': { request: { projectId: string; chapterNo: number; styleId: string }; response: { original: string; revised: string; model: string } }
-  'agent:revise': { request: { projectId: string; chapterNo: number; mode: 'proofread' | 'rhythm' | 'style' }; response: { original: string; revised: string; mode: 'proofread' | 'rhythm' | 'style'; wordDelta: number; changeRatio: number; changed: boolean; model: string } }
-  'agent:applyAdvice': { request: { text: string; advice: string }; response: { revised: string; model: string } }
-  'agent:marketResearch': { request: { genre: string; topic?: string }; response: { report: string; model: string } }
+  'agent:writeChapter': { request: { projectId: string; chapterNo: number; brief?: string; profileId?: string }; response: { text: string; model: string } }
+  'agent:polish': { request: { projectId: string; chapterNo: number; text?: string; instruction?: string; profileId?: string }; response: { suggestions: PolishSuggestion[]; polished: string; model: string } }
+  'agent:depolish': { request: { text: string; profileId?: string }; response: { text: string; model: string } }
+  'agent:styleConvert': { request: { projectId: string; chapterNo: number; styleId: string; profileId?: string }; response: { original: string; revised: string; model: string } }
+  'agent:revise': { request: { projectId: string; chapterNo: number; mode: 'proofread' | 'rhythm' | 'style'; profileId?: string }; response: { original: string; revised: string; mode: 'proofread' | 'rhythm' | 'style'; wordDelta: number; changeRatio: number; changed: boolean; model: string } }
+  'agent:applyAdvice': { request: { text: string; advice: string; profileId?: string }; response: { revised: string; model: string } }
+  'agent:marketResearch': { request: { genre: string; topic?: string; profileId?: string }; response: { report: string; model: string } }
   'settings:get': { request: void; response: AppSettings }
   'settings:set': { request: { settings: AppSettings }; response: AppSettings }
 }

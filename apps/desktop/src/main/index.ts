@@ -287,8 +287,8 @@ async function dispatch<K extends CommandName>(command: K, payload: CommandReque
       case 'lorebook:exportSillyTavern':
         return { ok: true, value: (await ws!.exportLorebookSillyTavern()) as CommandResponse<K> }
       case 'lorebook:autogen': {
-        const req = payload as { bookId: string }
-        return { ok: true, value: (await agentService!.autogenLorebook(req.bookId)) as CommandResponse<K> }
+        const req = payload as { bookId: string; profileId?: string }
+        return { ok: true, value: (await agentService!.autogenLorebook(req.bookId, req.profileId)) as CommandResponse<K> }
       }
       case 'lorebook:listGroups':
         return { ok: true, value: (await ws!.listLorebookGroups()) as CommandResponse<K> }
@@ -454,32 +454,32 @@ async function dispatch<K extends CommandName>(command: K, payload: CommandReque
         return { ok: true, value: (await modelService!.complete(req.profileId, req.messages, { temperature: req.temperature, maxTokens: req.maxTokens })) as CommandResponse<K> }
       }
       case 'agent:writeChapter': {
-        const req = payload as { projectId: string; chapterNo: number; brief?: string }
-        return { ok: true, value: (await agentService!.writeChapter(req.projectId, req.chapterNo, req.brief)) as CommandResponse<K> }
+        const req = payload as { projectId: string; chapterNo: number; brief?: string; profileId?: string }
+        return { ok: true, value: (await agentService!.writeChapter(req.projectId, req.chapterNo, req.brief, req.profileId)) as CommandResponse<K> }
       }
       case 'agent:polish': {
-        const req = payload as { projectId: string; chapterNo: number; text?: string; instruction?: string }
-        return { ok: true, value: (await agentService!.polish(req.projectId, req.chapterNo, req.text, req.instruction)) as CommandResponse<K> }
+        const req = payload as { projectId: string; chapterNo: number; text?: string; instruction?: string; profileId?: string }
+        return { ok: true, value: (await agentService!.polish(req.projectId, req.chapterNo, req.text, req.instruction, req.profileId)) as CommandResponse<K> }
       }
       case 'agent:depolish': {
-        const req = payload as { text: string }
-        return { ok: true, value: (await agentService!.depolish(req.text)) as CommandResponse<K> }
+        const req = payload as { text: string; profileId?: string }
+        return { ok: true, value: (await agentService!.depolish(req.text, req.profileId)) as CommandResponse<K> }
       }
       case 'agent:styleConvert': {
-        const req = payload as { projectId: string; chapterNo: number; styleId: string }
-        return { ok: true, value: (await agentService!.styleConvert(req.projectId, req.chapterNo, req.styleId)) as CommandResponse<K> }
+        const req = payload as { projectId: string; chapterNo: number; styleId: string; profileId?: string }
+        return { ok: true, value: (await agentService!.styleConvert(req.projectId, req.chapterNo, req.styleId, req.profileId)) as CommandResponse<K> }
       }
       case 'agent:revise': {
-        const req = payload as { projectId: string; chapterNo: number; mode: 'proofread' | 'rhythm' | 'style' }
-        return { ok: true, value: (await agentService!.revise(req.projectId, req.chapterNo, req.mode)) as CommandResponse<K> }
+        const req = payload as { projectId: string; chapterNo: number; mode: 'proofread' | 'rhythm' | 'style'; profileId?: string }
+        return { ok: true, value: (await agentService!.revise(req.projectId, req.chapterNo, req.mode, req.profileId)) as CommandResponse<K> }
       }
       case 'agent:applyAdvice': {
-        const req = payload as { text: string; advice: string }
-        return { ok: true, value: (await agentService!.applyAdvice(req.text, req.advice)) as CommandResponse<K> }
+        const req = payload as { text: string; advice: string; profileId?: string }
+        return { ok: true, value: (await agentService!.applyAdvice(req.text, req.advice, req.profileId)) as CommandResponse<K> }
       }
       case 'agent:marketResearch': {
-        const req = payload as { genre: string; topic?: string }
-        return { ok: true, value: (await agentService!.marketResearch(req.genre, req.topic ?? '')) as CommandResponse<K> }
+        const req = payload as { genre: string; topic?: string; profileId?: string }
+        return { ok: true, value: (await agentService!.marketResearch(req.genre, req.topic ?? '', req.profileId)) as CommandResponse<K> }
       }
       case 'settings:get': {
         const settings = await loadSettings()

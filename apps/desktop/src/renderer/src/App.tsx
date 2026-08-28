@@ -277,13 +277,13 @@ export function App(): JSX.Element {
     patch({ generating: 'write' })
     void run(async () => {
       try {
-        const result = await call('agent:writeChapter', { projectId, chapterNo })
+        const result = await call('agent:writeChapter', { projectId, chapterNo, profileId: state.activeModelId ?? undefined })
         setEditorText(result.text)
       } finally {
         patch({ generating: null })
       }
     }, 'AI 已生成章节')
-  }, [run, state.selectedProjectId, state.selectedChapterNo, setEditorText, patch])
+  }, [run, state.selectedProjectId, state.selectedChapterNo, setEditorText, patch, state.activeModelId])
 
   const polishAI = useCallback(() => {
     const projectId = state.selectedProjectId
@@ -293,7 +293,7 @@ export function App(): JSX.Element {
     patch({ generating: 'polish' })
     void run(async () => {
       try {
-        const result = await call('agent:polish', { projectId, chapterNo, text })
+        const result = await call('agent:polish', { projectId, chapterNo, text, profileId: state.activeModelId ?? undefined })
         const suggestions = splitPolishSuggestions(text, result.polished)
         setEditorText(result.polished)
         patch({ polishPreview: { original: text, polished: result.polished, suggestions } })
@@ -301,7 +301,7 @@ export function App(): JSX.Element {
         patch({ generating: null })
       }
     }, '润色完成，可逐条采纳')
-  }, [run, state.selectedProjectId, state.selectedChapterNo, state.editorText, setEditorText, patch])
+  }, [run, state.selectedProjectId, state.selectedChapterNo, state.editorText, setEditorText, patch, state.activeModelId])
 
   const togglePolish = useCallback((id: string) => {
     setState((prev) => {
@@ -350,10 +350,10 @@ export function App(): JSX.Element {
 
   const depolishAI = useCallback(() => {
     void run(async () => {
-      const result = await call('agent:depolish', { text: state.editorText })
+      const result = await call('agent:depolish', { text: state.editorText, profileId: state.activeModelId ?? undefined })
       setEditorText(result.text)
     }, '去 AI 味完成')
-  }, [run, state.editorText, setEditorText])
+  }, [run, state.editorText, setEditorText, state.activeModelId])
 
   const styleConvertAI = useCallback(async () => {
     const projectId = state.selectedProjectId
@@ -362,10 +362,10 @@ export function App(): JSX.Element {
     const styleId = await askPrompt('文风模板 id（如 style-xuanhuan / style-urban / style-scifi）', 'style-xuanhuan')
     if (!styleId) return
     await run(async () => {
-      const result = await call('agent:styleConvert', { projectId, chapterNo, styleId })
+      const result = await call('agent:styleConvert', { projectId, chapterNo, styleId, profileId: state.activeModelId ?? undefined })
       setEditorText(result.revised)
     }, '文风转换完成')
-  }, [run, askPrompt, state.selectedProjectId, state.selectedChapterNo, setEditorText])
+  }, [run, askPrompt, state.selectedProjectId, state.selectedChapterNo, setEditorText, state.activeModelId])
 
   const validateAI = useCallback(() => {
     const projectId = state.selectedProjectId
@@ -590,14 +590,14 @@ export function App(): JSX.Element {
                 <div className="action-grid">
                   <button disabled={!state.selectedProjectId} onClick={() => void run(async () => {
                     if (!state.selectedProjectId) return
-                    const result = await call('lorebook:autogen', { bookId: state.selectedProjectId })
+                    const result = await call('lorebook:autogen', { bookId: state.selectedProjectId, profileId: state.activeModelId ?? undefined })
                     void showAlert(`已生成 ${result.imported} 条：${result.names.join('、')}`, 'AI 一键生成设定')
                     await loadLorebook(state.selectedProjectId)
                   })}>AI 一键生成设定</button>
                   <button onClick={() => void run(async () => {
                     const genre = await askPrompt('题材（如玄幻/仙侠/都市）', '玄幻')
                     const topic = await askPrompt('选题方向（可留空）', '')
-                    if (genre) { const result = await call('agent:marketResearch', { genre, topic: topic ?? undefined }); void showAlert(result.report, '市场调研报告') }
+                    if (genre) { const result = await call('agent:marketResearch', { genre, topic: topic ?? undefined, profileId: state.activeModelId ?? undefined }); void showAlert(result.report, '市场调研报告') }
                   })}>市场调研</button>
                 </div>
               </div>
@@ -703,12 +703,12 @@ export function App(): JSX.Element {
                   <button onClick={() => void run(async () => {
                     if (!state.selectedProjectId) return
                     const advice = await askPrompt('诊断建议')
-                    if (advice) { const r = await call('agent:applyAdvice', { text: state.editorText, advice }); setEditorText(r.revised) }
+                    if (advice) { const r = await call('agent:applyAdvice', { text: state.editorText, advice, profileId: state.activeModelId ?? undefined }); setEditorText(r.revised) }
                   })}>应用建议</button>
                   <button onClick={() => void run(async () => {
                     if (!state.selectedProjectId || !state.selectedChapterNo) return
                     const mode = await askPrompt('修订模式（proofread/rhythm/style）', 'proofread')
-                    if (mode && ['proofread', 'rhythm', 'style'].includes(mode)) { const r = await call('agent:revise', { projectId: state.selectedProjectId, chapterNo: state.selectedChapterNo, mode: mode as 'proofread' | 'rhythm' | 'style' }); setEditorText(r.revised) }
+                    if (mode && ['proofread', 'rhythm', 'style'].includes(mode)) { const r = await call('agent:revise', { projectId: state.selectedProjectId, chapterNo: state.selectedChapterNo, mode: mode as 'proofread' | 'rhythm' | 'style', profileId: state.activeModelId ?? undefined }); setEditorText(r.revised) }
                   })}>AI 修订</button>
                   <button onClick={() => void run(async () => {
                     const stats = await call('chapters:wordcount', { text: state.editorText })
