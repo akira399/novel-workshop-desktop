@@ -5,3 +5,5 @@ release/
 *.log
 .DS_Store
 *.tgz
+_tmp_*
+apps/desktop/electron.vite.config.*.mjs
