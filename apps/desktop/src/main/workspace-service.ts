@@ -161,6 +161,11 @@ export class WorkspaceService {
     return this.requireNovel().saveChapter(projectId, chapterNo, title, text, brief)
   }
 
+  async deleteChapter(projectId: string, chapterNo: number): Promise<{ deleted: boolean }> {
+    const deleted = await this.requireNovel().deleteChapter(projectId, chapterNo)
+    return { deleted }
+  }
+
   async chapterStats(projectId: string, chapterNo: number) {
     return (await this.requireNovel().chapterStats(projectId, chapterNo)) ?? null
   }

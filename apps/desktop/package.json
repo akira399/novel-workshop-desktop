@@ -14,18 +14,26 @@
     "quick": "electron-vite build && electron-builder --dir && cmd /c run-unpacked.bat"
   },
   "dependencies": {
+    "@codemirror/commands": "^6.11.0",
+    "@codemirror/language": "^6.12.4",
+    "@codemirror/search": "^6.7.1",
+    "@codemirror/state": "^6.7.1",
+    "@codemirror/view": "^6.43.9",
     "@dafuyu/contracts": "workspace:*",
     "@dafuyu/core": "workspace:*",
     "@dafuyu/shared": "workspace:*",
+    "codemirror": "^6.0.2",
     "docx": "catalog:",
-    "epub-gen": "catalog:",
     "electron-updater": "6.6.2",
+    "epub-gen": "catalog:",
     "jszip": "catalog:",
     "pdfjs-dist": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
+    "react-markdown": "^10.1.0",
     "webdav": "catalog:",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

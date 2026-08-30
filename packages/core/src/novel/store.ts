@@ -293,4 +293,28 @@ export class NovelStore {
     }
     return numbers.sort((a, b) => a - b)
   }
+
+  /** 删除单章：移除正文文件并按剩余章节重新合计 Book.stats。章节不存在返回 false。 */
+  async deleteChapter(bookId: string, no: number): Promise<boolean> {
+    if (!Number.isInteger(no) || no < 1) {
+      throw { code: 'INVALID_FIELD_TYPE', message: `非法章节号: ${no}` } as never
+    }
+    const chapter = await this.readChapter(bookId, no)
+    if (!chapter) return false
+    const { rm } = await import('node:fs/promises')
+    await rm(join(this.bookDir(bookId), 'chapters', `ch${no}.md`), { force: true })
+    const book = await this.loadBook(bookId)
+    const remaining = await this.listChapterNumbers(bookId)
+    let totalWords = 0
+    for (const n of remaining) {
+      const item = await this.readChapter(bookId, n)
+      totalWords += item?.chapter.words ?? 0
+    }
+    await this.saveBook({
+      ...book,
+      stats: { ...book.stats, totalWords, chapterCount: remaining.length },
+      updatedAt: new Date().toISOString(),
+    })
+    return true
+  }
 }

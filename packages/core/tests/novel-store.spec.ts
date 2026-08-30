@@ -169,6 +169,37 @@ describe('NovelStore — path safety', () => {
   })
 })
 
+describe('NovelStore — delete chapter', () => {
+  it('removes the file and recomputes stats from remaining chapters', async () => {
+    const { store } = await freshStore()
+    const book = await store.createBook({ title: 'T', genre: 'x' })
+    const now = '2026-01-01T00:00:00.000Z'
+    const mk = (no: number, words: number) => ({ no, title: `第${no}章`, status: 'draft' as const, version: 1, words, createdAt: now, updatedAt: now })
+    await store.writeChapter(book.id, mk(1, 100), '一'.repeat(100))
+    await store.writeChapter(book.id, mk(2, 250), '二'.repeat(250))
+    const removed = await store.deleteChapter(book.id, 1)
+    expect(removed).toBe(true)
+    expect(await store.readChapter(book.id, 1)).toBeUndefined()
+    expect(await store.listChapterNumbers(book.id)).toEqual([2])
+    const reloaded = await store.loadBook(book.id)
+    expect(reloaded.stats.chapterCount).toBe(1)
+    expect(reloaded.stats.totalWords).toBe(250)
+  })
+
+  it('returns false when the chapter does not exist', async () => {
+    const { store } = await freshStore()
+    const book = await store.createBook({ title: 'T', genre: 'x' })
+    expect(await store.deleteChapter(book.id, 9)).toBe(false)
+  })
+
+  it('rejects invalid chapter numbers', async () => {
+    const { store } = await freshStore()
+    const book = await store.createBook({ title: 'T', genre: 'x' })
+    await catchError(store.deleteChapter(book.id, 0))
+    await catchError(store.deleteChapter(book.id, Number.NaN))
+  })
+})
+
 /** 类型冒烟：AuditEvent 可整体序列化。 */
 void ((event: AuditEvent) => JSON.stringify(event))
 

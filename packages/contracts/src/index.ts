@@ -168,6 +168,7 @@ export interface CommandMap {
   'chapters:list': { request: { projectId: string }; response: ChapterListItem[] }
   'chapters:get': { request: { projectId: string; chapterNo: number }; response: ChapterWithText | null }
   'chapters:save': { request: { projectId: string; chapterNo: number; title: string; text: string; brief?: string }; response: Chapter }
+  'chapters:delete': { request: { projectId: string; chapterNo: number }; response: { deleted: boolean } }
   'chapters:stats': { request: { projectId: string; chapterNo: number }; response: ChapterStatsBrief | null }
   'chapters:assemble': { request: { projectId: string; chapterNo: number; brief?: string }; response: ContextPacket }
   'chapters:validate': { request: { projectId: string; chapterNo: number; title: string; text: string; brief?: string }; response: ValidationReport }

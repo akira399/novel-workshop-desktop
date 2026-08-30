@@ -198,6 +198,10 @@ async function dispatch<K extends CommandName>(command: K, payload: CommandReque
         const req = payload as { projectId: string; chapterNo: number; title: string; text: string; brief?: string }
         return { ok: true, value: (await ws!.saveChapter(req.projectId, req.chapterNo, req.title, req.text, req.brief)) as CommandResponse<K> }
       }
+      case 'chapters:delete': {
+        const req = payload as { projectId: string; chapterNo: number }
+        return { ok: true, value: (await ws!.deleteChapter(req.projectId, req.chapterNo)) as CommandResponse<K> }
+      }
       case 'chapters:stats': {
         const req = payload as { projectId: string; chapterNo: number }
         return { ok: true, value: (await ws!.chapterStats(req.projectId, req.chapterNo)) as CommandResponse<K> }

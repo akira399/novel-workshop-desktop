@@ -211,6 +211,11 @@ export class NovelService {
     return await this.store.readChapter(bookId, chapterNo)
   }
 
+  /** 删除单章（正文文件移除，Book.stats 重新合计）。 */
+  async deleteChapter(bookId: string, chapterNo: number): Promise<boolean> {
+    return await this.store.deleteChapter(bookId, chapterNo)
+  }
+
   /** 全部章节（导出用，按序；稀疏编号也正确）。 */
   async allChapters(bookId: string): Promise<Array<{ chapter: Chapter; content: string }>> {
     const numbers = await this.store.listChapterNumbers(bookId)
