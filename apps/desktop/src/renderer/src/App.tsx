@@ -11,6 +11,7 @@ import { ChatBar } from './components/ChatBar'
 import { RightPanel } from './components/RightPanel'
 import { DialogHost } from './components/Dialogs'
 import { ModelSettingsModal } from './components/ModelSettingsModal'
+import { AppSettingsModal } from './components/AppSettingsModal'
 import { LoreEditorModal } from './components/LoreEditorModal'
 import { ReaderModal } from './components/ReaderModal'
 import { ProjectsPanel } from './components/panels/ProjectsPanel'
@@ -53,8 +54,23 @@ export function App(): JSX.Element {
   const panel = useStore((s) => s.panel)
   const hasProject = useStore((s) => s.projectId !== null)
   const saveChapter = useStore((s) => s.saveChapter)
+  const theme = useStore((s) => s.settings.theme)
 
   useEffect(() => { void boot() }, [boot])
+
+  // 主题：light / dark / system（跟随系统实时切换）
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const apply = (): void => {
+      const resolved = theme === 'system' ? (mq.matches ? 'dark' : 'light') : (theme ?? 'light')
+      document.documentElement.dataset.theme = resolved
+    }
+    apply()
+    if (theme === 'system') {
+      mq.addEventListener('change', apply)
+      return () => mq.removeEventListener('change', apply)
+    }
+  }, [theme])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -63,8 +79,17 @@ export function App(): JSX.Element {
         void saveChapter(true)
       }
     }
+    const onBlur = (): void => {
+      // 失焦兜底保存（自动保存之外的第二道防线）
+      const s = useStore.getState()
+      if (s.dirty && s.projectId && s.chapterNo != null && !s.generating) void s.saveChapter(false)
+    }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('blur', onBlur)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('blur', onBlur)
+    }
   }, [saveChapter])
 
   // 无作品时强制回到作品库面板（章节/流程/资料依赖作品）
@@ -109,6 +134,7 @@ export function App(): JSX.Element {
       <Toasts />
       <DialogHost />
       <ModelSettingsModal />
+      <AppSettingsModal />
       <LoreEditorModal />
       <ReaderModal />
     </div>

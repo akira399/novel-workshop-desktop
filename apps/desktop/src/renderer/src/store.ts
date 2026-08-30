@@ -89,8 +89,6 @@ interface AppState {
   editorText: string
   dirty: boolean
   saving: boolean
-  undoStack: string[]
-  redoStack: string[]
 
   // lorebook / library / prompts
   lorebook: LorebookSnapshot | null
@@ -120,6 +118,7 @@ interface AppState {
   // modals
   dialog: DialogRequest | null
   showModelSettings: boolean
+  showAppSettings: boolean
   loreEditor: { mode: 'new' | 'edit'; entry?: LoreEntry } | null
   reader: { path: string; ext: string; text: string | null } | null
   fontSize: number
@@ -157,10 +156,9 @@ interface AppState {
   renameChapter(no: number): Promise<void>
   deleteChapter(no: number): Promise<void>
   setEditorTitle(title: string): void
-  setEditorText(text: string, opts?: { pushUndo?: boolean }): void
-  undo(): void
-  redo(): void
+  setEditorText(text: string, opts?: { fromEditor?: boolean }): void
   saveChapter(explicit?: boolean): Promise<void>
+  scheduleAutoSave(): void
 
   writeChapterAI(): Promise<void>
   polishAI(): Promise<void>
@@ -210,17 +208,22 @@ interface AppState {
   setBatch(partial: Partial<Pick<AppState, 'batchProvider' | 'batchBaseUrl' | 'batchApiKey' | 'batchModelNames' | 'selectedRemoteModels'>>): void
   saveBatchModels(): Promise<void>
 
+  openAppSettings(): void
+  closeAppSettings(): void
+  setTheme(theme: NonNullable<AppSettings['theme']>): void
+
   setChatInput(text: string): void
   clearChat(): void
   sendChat(): Promise<void>
 
   openReader(): Promise<void>
   closeReader(): void
-  setFontSize(size: number): void
+  setFontSize(size: number): Promise<void>
 }
 
 let toastSeq = 0
 let booted = false
+let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
 
 export const useStore = create<AppState>()((set, get) => ({
   info: null,
@@ -243,8 +246,6 @@ export const useStore = create<AppState>()((set, get) => ({
   editorText: '',
   dirty: false,
   saving: false,
-  undoStack: [],
-  redoStack: [],
 
   lorebook: null,
   library: [],
@@ -269,6 +270,7 @@ export const useStore = create<AppState>()((set, get) => ({
 
   dialog: null,
   showModelSettings: false,
+  showAppSettings: false,
   loreEditor: null,
   reader: null,
   fontSize: 16,
@@ -389,7 +391,7 @@ export const useStore = create<AppState>()((set, get) => ({
         book: { id: book.id, title: book.title, genre: book.genre, currentPhase: book.currentPhase, stats: book.stats },
         chapters, lorebook,
         chapterNo: null, chapterMeta: null, editorText: '', editorTitle: '',
-        dirty: false, undoStack: [], redoStack: [],
+        dirty: false,
         panel: 'chapters',
         settings: { ...s.settings, lastProjectId: id },
       }))
@@ -444,7 +446,7 @@ export const useStore = create<AppState>()((set, get) => ({
     if (!ok) return
     await get().run(async () => {
       await call('projects:delete', { id: projectId, keepChapters: false })
-      set({ projectId: null, book: null, chapters: [], chapterNo: null, chapterMeta: null, editorText: '', editorTitle: '', dirty: false, undoStack: [], redoStack: [], panel: 'projects' })
+      set({ projectId: null, book: null, chapters: [], chapterNo: null, chapterMeta: null, editorText: '', editorTitle: '', dirty: false, panel: 'projects' })
       await get().refreshWorkspace()
     }, '已删除')
   },
@@ -479,14 +481,14 @@ export const useStore = create<AppState>()((set, get) => ({
         set({
           chapterNo: no, chapterMeta: chapter.chapter,
           editorText: chapter.content, editorTitle: chapter.chapter.title,
-          dirty: false, undoStack: [], redoStack: [],
+          dirty: false,
         })
       } else {
         // 未落盘的新章节（如刚点过"新建章节"）：直接进入编辑态
         set({
           chapterNo: no, chapterMeta: null,
           editorText: '', editorTitle: `第 ${no} 章`,
-          dirty: false, undoStack: [], redoStack: [],
+          dirty: false,
         })
       }
     })
@@ -498,7 +500,7 @@ export const useStore = create<AppState>()((set, get) => ({
     set({
       chapterNo: next, chapterMeta: null,
       editorText: '', editorTitle: `第 ${next} 章`,
-      dirty: true, undoStack: [], redoStack: [],
+      dirty: true,
     })
   },
 
@@ -539,50 +541,33 @@ export const useStore = create<AppState>()((set, get) => ({
 
   setEditorTitle(title) {
     set({ editorTitle: title, dirty: true })
+    get().scheduleAutoSave()
   },
 
+  /** 编辑器内容变化。fromEditor=true 表示来自 CM 输入（不再回写编辑器）。 */
   setEditorText(text, opts) {
-    if (opts?.pushUndo === false) {
-      set({ editorText: text, dirty: true })
-      return
-    }
-    set((s) => ({
-      editorText: text,
-      dirty: true,
-      undoStack: [...s.undoStack, s.editorText].slice(-200),
-      redoStack: [],
-    }))
+    set({ editorText: text, dirty: true })
+    if (opts?.fromEditor !== true) get().scheduleAutoSave()
   },
 
-  undo() {
-    set((s) => {
-      if (s.undoStack.length === 0) return s
-      const last = s.undoStack[s.undoStack.length - 1]!
-      return {
-        undoStack: s.undoStack.slice(0, -1),
-        redoStack: [s.editorText, ...s.redoStack].slice(0, 200),
-        editorText: last,
-        dirty: true,
+  /** 防抖自动保存（间隔可配置，默认 1.5s；AI 生成中不触发）。 */
+  scheduleAutoSave() {
+    if (autoSaveTimer) clearTimeout(autoSaveTimer)
+    const raw = get().settings.autoSaveMs
+    const ms = typeof raw === 'number' && raw > 0 ? raw : 1500
+    autoSaveTimer = setTimeout(() => {
+      autoSaveTimer = null
+      const s = get()
+      if (s.dirty && s.projectId && s.chapterNo != null && !s.generating && !s.saving) {
+        void s.saveChapter(false)
       }
-    })
-  },
-
-  redo() {
-    set((s) => {
-      if (s.redoStack.length === 0) return s
-      const next = s.redoStack[0]!
-      return {
-        redoStack: s.redoStack.slice(1),
-        undoStack: [...s.undoStack, s.editorText].slice(-200),
-        editorText: next,
-        dirty: true,
-      }
-    })
+    }, ms)
   },
 
   async saveChapter(explicit = false) {
     const { projectId, chapterNo, editorTitle, editorText } = get()
     if (!projectId || chapterNo == null) return
+    if (autoSaveTimer) { clearTimeout(autoSaveTimer); autoSaveTimer = null }
     set({ saving: true })
     try {
       const saved = await call('chapters:save', {
@@ -1105,6 +1090,19 @@ export const useStore = create<AppState>()((set, get) => ({
     })
   },
 
+  openAppSettings() {
+    set({ showAppSettings: true })
+  },
+
+  closeAppSettings() {
+    set({ showAppSettings: false })
+  },
+
+  async setTheme(theme) {
+    set((s) => ({ settings: { ...s.settings, theme } }))
+    await call('settings:set', { settings: { theme } }).catch(() => undefined)
+  },
+
   // ── 聊天 ──
 
   setChatInput(text) {
@@ -1191,8 +1189,9 @@ export const useStore = create<AppState>()((set, get) => ({
     set({ reader: null })
   },
 
-  setFontSize(size) {
+  async setFontSize(size) {
     const fontSize = Math.max(12, Math.min(28, size))
-    set({ fontSize })
+    set((s) => ({ fontSize, settings: { ...s.settings, fontSize } }))
+    await call('settings:set', { settings: { fontSize } }).catch(() => undefined)
   },
 }))

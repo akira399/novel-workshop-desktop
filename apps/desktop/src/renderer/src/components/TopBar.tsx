@@ -2,7 +2,7 @@
  * 顶栏 — 品牌、工作区、全局入口与窗口控制（可拖拽移动窗口）。
  */
 import { useStore } from '../store'
-import { IconWinClose, IconWinMaximize, IconWinMinimize } from './Icons'
+import { IconMoon, IconSun, IconWinClose, IconWinMaximize, IconWinMinimize } from './Icons'
 
 export function TopBar(): JSX.Element {
   const info = useStore((s) => s.info)
@@ -10,6 +10,11 @@ export function TopBar(): JSX.Element {
   const chooseWorkspace = useStore((s) => s.chooseWorkspace)
   const openReader = useStore((s) => s.openReader)
   const openModelSettings = useStore((s) => s.openModelSettings)
+  const openAppSettings = useStore((s) => s.openAppSettings)
+  const theme = useStore((s) => s.settings.theme)
+  const setTheme = useStore((s) => s.setTheme)
+
+  const resolvedDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
 
   return (
     <header className="topbar">
@@ -26,6 +31,14 @@ export function TopBar(): JSX.Element {
         <div className="v-divider" />
         <button className="ghost" onClick={() => void openReader()}>本地阅读</button>
         <button className="ghost" onClick={openModelSettings}>模型设置</button>
+        <button
+          className="icon-btn"
+          title={resolvedDark ? '切换为浅色' : '切换为深色'}
+          onClick={() => void setTheme(resolvedDark ? 'light' : 'dark')}
+        >
+          {resolvedDark ? <IconSun size={15} /> : <IconMoon size={14} />}
+        </button>
+        <button className="ghost" onClick={openAppSettings}>设置</button>
       </div>
       <div className="window-controls">
         <button className="win-btn" onClick={() => window.novelWorkshop.minimize()} title="最小化"><IconWinMinimize size={13} /></button>

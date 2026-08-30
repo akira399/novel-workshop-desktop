@@ -85,6 +85,7 @@ body {
 .muted { color: var(--text-secondary); }
 .small { font-size: 12px; }
 .flex-spacer { flex: 1; }
+.flex-1 { flex: 1; min-width: 0; }
 
 /* ── 全局控件 ── */
 button {
@@ -440,6 +441,35 @@ textarea { resize: none; }
   flex-shrink: 0;
 }
 .status-left { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── CodeMirror 编辑器 ── */
+.editor-pane {
+  flex: 1; min-height: 0; overflow: hidden; position: relative;
+  background: transparent;
+}
+.editor-pane .cm-editor { height: 100%; background: transparent; }
+.editor-pane .cm-editor.cm-focused { outline: none; }
+.editor-pane .cm-scroller {
+  font-family: var(--font-reading);
+  line-height: 2.0;
+  letter-spacing: .015em;
+  padding: 28px max(32px, calc((100% - 860px) / 2)) 48px;
+  overflow-y: auto;
+}
+.editor-pane .cm-content {
+  max-width: 860px;
+  margin: 0 auto;
+  caret-color: var(--text);
+  color: var(--text);
+}
+.editor-pane .cm-line { text-indent: 2em; }
+.editor-pane .cm-cursor { border-left: 1.5px solid var(--text); }
+.editor-pane .cm-selectionBackground { background: rgba(41,37,36,.13) !important; }
+[data-theme="dark"] .editor-pane .cm-selectionBackground { background: rgba(232,229,225,.2) !important; }
+.editor-pane .cm-placeholder { color: var(--text-tertiary); font-family: var(--font-ui); text-indent: 0; }
+.editor-pane .cm-searchMatch { background: var(--warm-soft); border-radius: 2px; }
+.editor-pane .cm-searchMatch-selected { background: var(--warm); }
+.editor-pane .cm-panels { display: none; }
 
 /* ── 右侧结果面板 ── */
 .right-panel {

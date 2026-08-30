@@ -50,7 +50,7 @@ function resolveResourcesDir(): string {
   return resolve(__dirname, '../../../resources')
 }
 
-function createWindow(): void {
+function createWindow(backgroundColor = '#f4f4f3'): void {
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -59,6 +59,7 @@ function createWindow(): void {
     title: APP_NAME,
     show: false,
     frame: false,
+    backgroundColor,
     autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -541,7 +542,8 @@ async function bootstrap(): Promise<void> {
   exportService = new ExportService(workspaceService)
   syncService = new SyncService({ loadSettings, saveSettings, workspacePath: () => workspaceService!.getWorkspacePath() })
   initAutoUpdater()
-  createWindow()
+  const startupSettings = await loadSettings()
+  createWindow(startupSettings.theme === 'dark' ? '#171614' : '#f4f4f3')
 
   ipcMain.handle('novel:invoke', async (_event, command: string, payload: unknown) => {
     return dispatch(command as CommandName, payload as never)

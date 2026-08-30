@@ -1,5 +1,5 @@
 /**
- * 中央编辑区 — 章节标题 + AI 动作条 + 正文编辑 + 状态栏。
+ * 中央编辑区 — 章节标题 + AI 动作条 + CodeMirror 正文 + 状态栏。
  */
 import { useMemo, useRef, useState } from 'react'
 import { countChapter } from '@dafuyu/core/stats'
@@ -7,18 +7,16 @@ import { useStore } from '../store'
 import { genreLabel } from '../constants'
 import { IconRedo, IconSearch, IconSparkles, IconUndo, IconX } from './Icons'
 import { StatusBar } from './StatusBar'
+import { EditorPane, type EditorApi } from './EditorPane'
 
 export function EditorArea(): JSX.Element {
   const projectId = useStore((s) => s.projectId)
   const book = useStore((s) => s.book)
+  const chapterNo = useStore((s) => s.chapterNo)
   const editorTitle = useStore((s) => s.editorTitle)
   const setEditorTitle = useStore((s) => s.setEditorTitle)
   const editorText = useStore((s) => s.editorText)
   const setEditorText = useStore((s) => s.setEditorText)
-  const undo = useStore((s) => s.undo)
-  const redo = useStore((s) => s.redo)
-  const undoCount = useStore((s) => s.undoStack.length)
-  const redoCount = useStore((s) => s.redoStack.length)
   const saveChapter = useStore((s) => s.saveChapter)
   const dirty = useStore((s) => s.dirty)
   const saving = useStore((s) => s.saving)
@@ -37,25 +35,23 @@ export function EditorArea(): JSX.Element {
   const importFile = useStore((s) => s.importFile)
   const importDemo = useStore((s) => s.importDemo)
 
-  const editorRef = useRef<HTMLTextAreaElement | null>(null)
+  const apiRef = useRef<EditorApi | null>(null)
+  const [undoState, setUndoState] = useState({ canUndo: false, canRedo: false })
   const [findOpen, setFindOpen] = useState(false)
   const [findText, setFindText] = useState('')
   const [replaceText, setReplaceText] = useState('')
 
-  const stats = useMemo(() => (dirty || editorText ? countChapter(editorText, 0) : null), [editorText])
+  const stats = useMemo(() => countChapter(editorText, 0), [editorText])
 
   const doFind = (): void => {
     if (!findText) return
-    const idx = editorText.indexOf(findText)
-    if (idx >= 0 && editorRef.current) {
-      editorRef.current.focus()
-      editorRef.current.setSelectionRange(idx, idx + findText.length)
-    }
+    apiRef.current?.find(findText)
+    apiRef.current?.focus()
   }
 
   const doReplaceAll = (): void => {
     if (!findText) return
-    setEditorText(editorText.split(findText).join(replaceText))
+    apiRef.current?.replaceAll(findText, replaceText)
   }
 
   if (!projectId || !book) {
@@ -98,11 +94,11 @@ export function EditorArea(): JSX.Element {
         />
         <span className={`dirty-dot ${dirty ? 'on' : ''}`} title={dirty ? '未保存' : '已保存'} />
         <div className="v-divider" />
-        <button className="icon-btn" title="撤销 (Ctrl+Z)" disabled={undoCount === 0} onClick={() => { undo(); editorRef.current?.focus() }}><IconUndo size={14} /></button>
-        <button className="icon-btn" title="重做 (Ctrl+Y)" disabled={redoCount === 0} onClick={() => { redo(); editorRef.current?.focus() }}><IconRedo size={14} /></button>
+        <button className="icon-btn" title="撤销 (Ctrl+Z)" disabled={!undoState.canUndo} onClick={() => apiRef.current?.undo()}><IconUndo size={14} /></button>
+        <button className="icon-btn" title="重做 (Ctrl+Y)" disabled={!undoState.canRedo} onClick={() => apiRef.current?.redo()}><IconRedo size={14} /></button>
         <button className={`icon-btn ${findOpen ? 'active' : ''}`} title="查找替换" onClick={() => setFindOpen(!findOpen)}><IconSearch size={14} /></button>
-        <button className="icon-btn text-btn" title="缩小字号" onClick={() => setFontSize(fontSize - 1)}>A-</button>
-        <button className="icon-btn text-btn" title="放大字号" onClick={() => setFontSize(fontSize + 1)}>A+</button>
+        <button className="icon-btn text-btn" title="缩小字号" onClick={() => void setFontSize(fontSize - 1)}>A-</button>
+        <button className="icon-btn text-btn" title="放大字号" onClick={() => void setFontSize(fontSize + 1)}>A+</button>
         <button
           className={`save-btn ${saving ? 'working' : dirty ? 'dirty' : ''}`}
           onClick={() => void saveChapter(true)}
@@ -131,34 +127,27 @@ export function EditorArea(): JSX.Element {
       {findOpen && (
         <div className="find-bar">
           <input autoFocus value={findText} onChange={(e) => setFindText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') doFind() }} placeholder="查找" />
-          <button onClick={doFind}>查找</button>
+          <button onClick={doFind}>查找下一个</button>
           <input value={replaceText} onChange={(e) => setReplaceText(e.target.value)} placeholder="替换为" />
           <button onClick={doReplaceAll}>全部替换</button>
           <button className="icon-btn" title="关闭" onClick={() => setFindOpen(false)}><IconX size={13} /></button>
         </div>
       )}
 
-      <textarea
-        ref={editorRef}
-        className="chapter-editor"
-        value={editorText}
-        onChange={(e) => setEditorText(e.target.value)}
-        style={{ fontSize }}
-        placeholder="在此编辑小说正文…"
-        spellCheck={false}
+      <EditorPane
+        text={editorText}
+        fontSize={fontSize}
+        chapterKey={`${projectId}:${chapterNo ?? 'none'}`}
+        onChange={(text) => setEditorText(text, { fromEditor: true })}
+        onStateChange={setUndoState}
+        apiRef={apiRef}
       />
 
       <StatusBar
-        left={chips(book, editorTitle)}
-        words={stats?.totalChars ?? 0}
-        paragraphs={stats?.paragraphs ?? 0}
+        left={[book.title, genreLabel(book.genre), editorTitle.trim() || (chapterNo != null ? `第 ${chapterNo} 章` : '')].filter(Boolean).join(' · ')}
+        words={stats.totalChars}
+        paragraphs={stats.paragraphs}
       />
     </div>
   )
-}
-
-function chips(book: { title: string; genre: string }, editorTitle: string): string {
-  const parts = [book.title, genreLabel(book.genre)]
-  if (editorTitle.trim()) parts.push(editorTitle.trim())
-  return parts.join(' · ')
 }
