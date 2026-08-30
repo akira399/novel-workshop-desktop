@@ -4,6 +4,7 @@
  */
 import { useEffect } from 'react'
 import { useStore } from './store'
+import { onStream } from './ipc'
 import { TopBar } from './components/TopBar'
 import { ActivityRail } from './components/ActivityRail'
 import { EditorArea } from './components/EditorArea'
@@ -57,6 +58,11 @@ export function App(): JSX.Element {
   const theme = useStore((s) => s.settings.theme)
 
   useEffect(() => { void boot() }, [boot])
+
+  // 订阅主进程流式分片
+  useEffect(() => onStream((chunk) => {
+    useStore.getState().applyStreamChunk(chunk.opId, chunk.delta)
+  }), [])
 
   // 主题：light / dark / system（跟随系统实时切换）
   useEffect(() => {

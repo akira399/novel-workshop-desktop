@@ -27,7 +27,6 @@
     "electron-updater": "6.6.2",
     "epub-gen": "catalog:",
     "jszip": "catalog:",
-    "pdfjs-dist": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "react-markdown": "^10.1.0",

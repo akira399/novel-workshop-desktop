@@ -146,6 +146,17 @@ export interface ModelProfile {
 
 // ─────────────────────────── 命令表 ───────────────────────────
 
+/** 流式输出分片（主进程 → 渲染层，preload on('stream') 订阅）。 */
+export interface StreamChunk {
+  opId: string
+  delta: string
+}
+
+/** 主进程主动推送的事件表。 */
+export interface EventMap {
+  stream: StreamChunk
+}
+
 export interface CommandMap {
   'app:getInfo': { request: void; response: AppInfo }
   'workspace:get': { request: void; response: WorkspaceInfo | null }
@@ -225,13 +236,16 @@ export interface CommandMap {
   'models:test': { request: { id: string }; response: { ok: boolean; message: string; latencyMs: number } }
   'models:fetch': { request: { provider: ModelProvider; baseUrl?: string; apiKey?: string }; response: { models: string[]; error?: string } }
   'agent:complete': { request: { profileId?: string; messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>; temperature?: number; maxTokens?: number }; response: { text: string; model: string; provider: string } }
-  'agent:writeChapter': { request: { projectId: string; chapterNo: number; brief?: string; profileId?: string }; response: { text: string; model: string } }
-  'agent:polish': { request: { projectId: string; chapterNo: number; text?: string; instruction?: string; profileId?: string }; response: { suggestions: PolishSuggestion[]; polished: string; model: string } }
-  'agent:depolish': { request: { text: string; profileId?: string }; response: { text: string; model: string } }
-  'agent:styleConvert': { request: { projectId: string; chapterNo: number; styleId: string; profileId?: string }; response: { original: string; revised: string; model: string } }
-  'agent:revise': { request: { projectId: string; chapterNo: number; mode: 'proofread' | 'rhythm' | 'style'; profileId?: string }; response: { original: string; revised: string; mode: 'proofread' | 'rhythm' | 'style'; wordDelta: number; changeRatio: number; changed: boolean; model: string } }
-  'agent:applyAdvice': { request: { text: string; advice: string; profileId?: string }; response: { revised: string; model: string } }
-  'agent:marketResearch': { request: { genre: string; topic?: string; profileId?: string }; response: { report: string; model: string } }
+  /** 流式对话：增量经 EventMap['stream'] 推送（opId 对应），命令返回完整结果。 */
+  'agent:chatStream': { request: { profileId?: string; messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>; temperature?: number; maxTokens?: number; opId: string }; response: { text: string; model: string; provider: string; aborted: boolean } }
+  'agent:abortStream': { request: { opId: string }; response: { aborted: boolean } }
+  'agent:writeChapter': { request: { projectId: string; chapterNo: number; brief?: string; profileId?: string; templateId?: string; stream?: boolean; opId?: string }; response: { text: string; model: string; aborted?: boolean } }
+  'agent:polish': { request: { projectId: string; chapterNo: number; text?: string; instruction?: string; profileId?: string; stream?: boolean; opId?: string }; response: { suggestions: PolishSuggestion[]; polished: string; model: string; aborted?: boolean } }
+  'agent:depolish': { request: { text: string; profileId?: string; stream?: boolean; opId?: string }; response: { text: string; model: string; aborted?: boolean } }
+  'agent:styleConvert': { request: { projectId: string; chapterNo: number; styleId: string; profileId?: string; stream?: boolean; opId?: string }; response: { original: string; revised: string; model: string; aborted?: boolean } }
+  'agent:revise': { request: { projectId: string; chapterNo: number; mode: 'proofread' | 'rhythm' | 'style'; profileId?: string; stream?: boolean; opId?: string }; response: { original: string; revised: string; mode: 'proofread' | 'rhythm' | 'style'; wordDelta: number; changeRatio: number; changed: boolean; model: string; aborted?: boolean } }
+  'agent:applyAdvice': { request: { text: string; advice: string; profileId?: string; stream?: boolean; opId?: string }; response: { revised: string; model: string; aborted?: boolean } }
+  'agent:marketResearch': { request: { genre: string; topic?: string; profileId?: string; stream?: boolean; opId?: string }; response: { report: string; model: string; aborted?: boolean } }
   'settings:get': { request: void; response: AppSettings }
   'settings:set': { request: { settings: AppSettings }; response: AppSettings }
 }

@@ -23,6 +23,8 @@ export function EditorArea(): JSX.Element {
   const fontSize = useStore((s) => s.fontSize)
   const setFontSize = useStore((s) => s.setFontSize)
   const generating = useStore((s) => s.generating)
+  const activeOpId = useStore((s) => s.activeOpId)
+  const cancelActiveOp = useStore((s) => s.cancelActiveOp)
   const writeChapterAI = useStore((s) => s.writeChapterAI)
   const polishAI = useStore((s) => s.polishAI)
   const depolishAI = useStore((s) => s.depolishAI)
@@ -119,6 +121,9 @@ export function EditorArea(): JSX.Element {
         <button className="chip" disabled={generating !== null} onClick={() => void depolishAI()}>去 AI 味</button>
         <button className="chip" disabled={generating !== null} onClick={() => void styleConvertAI()}>文风</button>
         <button className="chip" disabled={generating !== null} onClick={() => void reviseAI()}>修订</button>
+        {generating && activeOpId && (
+          <button className="chip stop-chip" onClick={() => void cancelActiveOp()}>■ 停止</button>
+        )}
         <span className="flex-spacer" />
         <button className="chip" onClick={() => void validateAI()}>校验</button>
         <button className="chip" onClick={() => void diagnoseAI()}>诊断</button>

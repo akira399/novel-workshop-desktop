@@ -1,6 +1,8 @@
 /**
- * 右侧结果面板 — 润色逐条采纳 / 各类检查结果卡片。
+ * 右侧结果面板 — 润色逐条采纳 / AI 写回 diff 确认 / 检查结果与流式预览卡片。
  */
+import { useMemo } from 'react'
+import { diffSentences } from '@dafuyu/core/polish'
 import { useStore } from '../store'
 import { IconCopy, IconX } from './Icons'
 
@@ -13,7 +15,16 @@ export function RightPanel(): JSX.Element | null {
   const rejectAllPolish = useStore((s) => s.rejectAllPolish)
   const discardPolish = useStore((s) => s.discardPolish)
   const savePolish = useStore((s) => s.savePolish)
+  const applyDiff = useStore((s) => s.applyDiff)
   const busy = useStore((s) => s.busy)
+  const streaming = useStore((s) => s.streamTarget === 'panel')
+  const streamText = useStore((s) => s.streamText)
+
+  const diffChunks = useMemo(() => {
+    if (!panel || panel.kind !== 'diff') return []
+    return diffSentences(panel.original, panel.next)
+  }, [panel])
+  const diffChangeCount = useMemo(() => diffChunks.filter((c) => c.type !== 'same').length, [diffChunks])
 
   if (!panel) return null
 
@@ -22,10 +33,19 @@ export function RightPanel(): JSX.Element | null {
     useStore.getState().notify('已复制到剪贴板')
   }
 
+  const title = panel.kind === 'polish'
+    ? '润色建议'
+    : panel.kind === 'diff'
+      ? 'AI 修改建议'
+      : panel.title
+
   return (
     <aside className="right-panel">
       <div className="right-panel-head">
-        <strong>{panel.kind === 'polish' ? '润色建议' : panel.title}</strong>
+        <strong className="right-panel-title">
+          {title}
+          {streaming && <span className="spinner" />}
+        </strong>
         <button className="icon-btn" onClick={close} title="关闭"><IconX size={14} /></button>
       </div>
 
@@ -55,14 +75,37 @@ export function RightPanel(): JSX.Element | null {
         </div>
       )}
 
+      {panel.kind === 'diff' && (
+        <div className="right-panel-body">
+          <div className="polish-summary">
+            AI 建议修改正文（{diffChangeCount} 处变化），确认后才会写入编辑器。
+          </div>
+          <div className="polish-actions">
+            <button className="primary" onClick={applyDiff}>应用到编辑器</button>
+            <button className="danger-ghost" onClick={close}>放弃</button>
+          </div>
+          <div className="diff-view">
+            {diffChunks.map((c, i) => (
+              c.type === 'same'
+                ? <span key={i}>{c.text}</span>
+                : c.type === 'del'
+                  ? <del key={i} className="diff-del">{c.text}</del>
+                  : <ins key={i} className="diff-add">{c.text}</ins>
+            ))}
+          </div>
+        </div>
+      )}
+
       {panel.kind === 'result' && (
         <div className="right-panel-body">
           <div className="result-card">
-            <pre>{panel.text}</pre>
+            <pre>{streaming ? streamText : panel.text}</pre>
           </div>
-          <div className="polish-actions">
-            <button onClick={() => void copyText(panel.text)}><IconCopy size={13} /> 复制全文</button>
-          </div>
+          {!streaming && panel.text && (
+            <div className="polish-actions">
+              <button onClick={() => void copyText(panel.text)}><IconCopy size={13} /> 复制全文</button>
+            </div>
+          )}
         </div>
       )}
     </aside>

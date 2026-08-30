@@ -85,6 +85,16 @@ function createWindow(backgroundColor = '#f4f4f3'): void {
   }
 }
 
+/** 流式请求构造：请求带 stream+opId 且窗口就绪时，增量经 novel:event:stream 推送。 */
+function streamOpts(req: { stream?: boolean; opId?: string }): { opId: string; onDelta: (delta: string) => void } | undefined {
+  if (!req.stream || !req.opId || !mainWindow) return undefined
+  const opId = req.opId
+  return {
+    opId,
+    onDelta: (delta) => mainWindow?.webContents.send('novel:event:stream', { opId, delta }),
+  }
+}
+
 async function dispatch<K extends CommandName>(command: K, payload: CommandRequest<K>): Promise<IpcResult<CommandResponse<K>>> {
   try {
     const ws = workspaceService
@@ -458,33 +468,49 @@ async function dispatch<K extends CommandName>(command: K, payload: CommandReque
         const req = payload as { profileId?: string; messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>; temperature?: number; maxTokens?: number }
         return { ok: true, value: (await modelService!.complete(req.profileId, req.messages, { temperature: req.temperature, maxTokens: req.maxTokens })) as CommandResponse<K> }
       }
+      case 'agent:chatStream': {
+        const req = payload as { profileId?: string; messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>; temperature?: number; maxTokens?: number; opId: string }
+        if (!mainWindow) return { ok: false, error: { code: 'IO_FAILURE', message: '主窗口未就绪' } }
+        const result = await modelService!.streamComplete(
+          req.opId,
+          req.profileId,
+          req.messages,
+          { temperature: req.temperature, maxTokens: req.maxTokens },
+          (delta) => mainWindow!.webContents.send('novel:event:stream', { opId: req.opId, delta }),
+        )
+        return { ok: true, value: { text: result.text, model: result.model, provider: result.provider, aborted: result.aborted } as CommandResponse<K> }
+      }
+      case 'agent:abortStream': {
+        const req = payload as { opId: string }
+        return { ok: true, value: { aborted: modelService!.abortStream(req.opId) } as CommandResponse<K> }
+      }
       case 'agent:writeChapter': {
-        const req = payload as { projectId: string; chapterNo: number; brief?: string; profileId?: string }
-        return { ok: true, value: (await agentService!.writeChapter(req.projectId, req.chapterNo, req.brief, req.profileId)) as CommandResponse<K> }
+        const req = payload as { projectId: string; chapterNo: number; brief?: string; profileId?: string; templateId?: string; stream?: boolean; opId?: string }
+        return { ok: true, value: (await agentService!.writeChapter(req.projectId, req.chapterNo, req.brief, req.profileId, req.templateId, streamOpts(req))) as CommandResponse<K> }
       }
       case 'agent:polish': {
-        const req = payload as { projectId: string; chapterNo: number; text?: string; instruction?: string; profileId?: string }
-        return { ok: true, value: (await agentService!.polish(req.projectId, req.chapterNo, req.text, req.instruction, req.profileId)) as CommandResponse<K> }
+        const req = payload as { projectId: string; chapterNo: number; text?: string; instruction?: string; profileId?: string; stream?: boolean; opId?: string }
+        return { ok: true, value: (await agentService!.polish(req.projectId, req.chapterNo, req.text, req.instruction, req.profileId, streamOpts(req))) as CommandResponse<K> }
       }
       case 'agent:depolish': {
-        const req = payload as { text: string; profileId?: string }
-        return { ok: true, value: (await agentService!.depolish(req.text, req.profileId)) as CommandResponse<K> }
+        const req = payload as { text: string; profileId?: string; stream?: boolean; opId?: string }
+        return { ok: true, value: (await agentService!.depolish(req.text, req.profileId, streamOpts(req))) as CommandResponse<K> }
       }
       case 'agent:styleConvert': {
-        const req = payload as { projectId: string; chapterNo: number; styleId: string; profileId?: string }
-        return { ok: true, value: (await agentService!.styleConvert(req.projectId, req.chapterNo, req.styleId, req.profileId)) as CommandResponse<K> }
+        const req = payload as { projectId: string; chapterNo: number; styleId: string; profileId?: string; stream?: boolean; opId?: string }
+        return { ok: true, value: (await agentService!.styleConvert(req.projectId, req.chapterNo, req.styleId, req.profileId, streamOpts(req))) as CommandResponse<K> }
       }
       case 'agent:revise': {
-        const req = payload as { projectId: string; chapterNo: number; mode: 'proofread' | 'rhythm' | 'style'; profileId?: string }
-        return { ok: true, value: (await agentService!.revise(req.projectId, req.chapterNo, req.mode, req.profileId)) as CommandResponse<K> }
+        const req = payload as { projectId: string; chapterNo: number; mode: 'proofread' | 'rhythm' | 'style'; profileId?: string; stream?: boolean; opId?: string }
+        return { ok: true, value: (await agentService!.revise(req.projectId, req.chapterNo, req.mode, req.profileId, streamOpts(req))) as CommandResponse<K> }
       }
       case 'agent:applyAdvice': {
-        const req = payload as { text: string; advice: string; profileId?: string }
-        return { ok: true, value: (await agentService!.applyAdvice(req.text, req.advice, req.profileId)) as CommandResponse<K> }
+        const req = payload as { text: string; advice: string; profileId?: string; stream?: boolean; opId?: string }
+        return { ok: true, value: (await agentService!.applyAdvice(req.text, req.advice, req.profileId, streamOpts(req))) as CommandResponse<K> }
       }
       case 'agent:marketResearch': {
-        const req = payload as { genre: string; topic?: string; profileId?: string }
-        return { ok: true, value: (await agentService!.marketResearch(req.genre, req.topic ?? '', req.profileId)) as CommandResponse<K> }
+        const req = payload as { genre: string; topic?: string; profileId?: string; stream?: boolean; opId?: string }
+        return { ok: true, value: (await agentService!.marketResearch(req.genre, req.topic ?? '', req.profileId, streamOpts(req))) as CommandResponse<K> }
       }
       case 'settings:get': {
         const settings = await loadSettings()

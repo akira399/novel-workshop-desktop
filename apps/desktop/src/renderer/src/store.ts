@@ -37,6 +37,7 @@ export type DialogRequest =
 
 export type RightPanel =
   | { kind: 'polish' }
+  | { kind: 'diff'; original: string; next: string }
   | { kind: 'result'; title: string; text: string }
 
 export type PanelKey = 'projects' | 'chapters' | 'lorebook' | 'workflow' | 'data' | 'toolbox'
@@ -111,6 +112,12 @@ interface AppState {
   chatInput: string
   chatBusy: boolean
 
+  // AI 流式
+  streamOpId: string | null
+  streamTarget: 'panel' | 'chat' | null
+  streamText: string
+  activeOpId: string | null
+
   // AI
   generating: EditorBusy
   polishPreview: PolishPreview | null
@@ -167,6 +174,7 @@ interface AppState {
   rejectAllPolish(): void
   discardPolish(): void
   savePolish(): Promise<void>
+  applyDiff(): void
   depolishAI(): Promise<void>
   styleConvertAI(): Promise<void>
   reviseAI(): Promise<void>
@@ -215,6 +223,8 @@ interface AppState {
   setChatInput(text: string): void
   clearChat(): void
   sendChat(): Promise<void>
+  applyStreamChunk(opId: string, delta: string): void
+  cancelActiveOp(): Promise<void>
 
   openReader(): Promise<void>
   closeReader(): void
@@ -224,6 +234,27 @@ interface AppState {
 let toastSeq = 0
 let booted = false
 let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
+
+function newOpId(): string {
+  return `op_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+}
+
+/** 书籍题材 → 写章题材模板（resources/prompts/writing-chapter-*）。 */
+const GENRE_TEMPLATE_MAP: Record<string, string> = {
+  fantasy: 'writing-chapter-xuanhuan',
+  xianxia: 'writing-chapter-xianxia',
+  game: 'writing-chapter-game',
+  history: 'writing-chapter-historical',
+  humor: 'writing-chapter-humor',
+  scifi: 'writing-chapter-scifi',
+  mystery: 'writing-chapter-suspense',
+  suspense: 'writing-chapter-suspense',
+  horror: 'writing-chapter-suspense',
+  urban: 'writing-chapter-urban',
+  business: 'writing-chapter-urban',
+  campus: 'writing-chapter-urban',
+  realistic: 'writing-chapter-urban',
+}
 
 export const useStore = create<AppState>()((set, get) => ({
   info: null,
@@ -264,6 +295,11 @@ export const useStore = create<AppState>()((set, get) => ({
   chatMessages: [],
   chatInput: '',
   chatBusy: false,
+
+  streamOpId: null,
+  streamTarget: null,
+  streamText: '',
+  activeOpId: null,
 
   generating: null,
   polishPreview: null,
@@ -591,20 +627,37 @@ export const useStore = create<AppState>()((set, get) => ({
   // ── AI 创作动作 ──
 
   async writeChapterAI() {
-    const { projectId, chapterNo } = get()
+    const { projectId, chapterNo, book } = get()
     if (!projectId) return
     const no = chapterNo ?? 1
-    set({ generating: 'write', chapterNo: no })
+    const opId = newOpId()
+    set({
+      generating: 'write', chapterNo: no,
+      streamOpId: opId, streamTarget: 'panel', streamText: '', activeOpId: opId,
+      rightPanel: { kind: 'result', title: `AI 正在写第 ${no} 章…`, text: '' },
+    })
     await get().run(async () => {
       try {
-        const result = await call('agent:writeChapter', { projectId, chapterNo: no, profileId: get().activeModelId ?? undefined })
-        get().setEditorText(result.text)
-        set((s) => ({ editorTitle: s.editorTitle || `第 ${no} 章`, dirty: true }))
-        get().notify('AI 已生成章节，请检查后保存')
+        const result = await call('agent:writeChapter', {
+          projectId, chapterNo: no,
+          profileId: get().activeModelId ?? undefined,
+          templateId: book ? GENRE_TEMPLATE_MAP[book.genre] : undefined,
+          stream: true, opId,
+        })
+        if (result.aborted) {
+          const partial = get().streamText || result.text
+          set({ rightPanel: { kind: 'result', title: '已停止生成（保留部分内容）', text: partial } })
+          get().notify('已停止生成，部分内容保留在右侧')
+        } else {
+          get().setEditorText(result.text)
+          set((s) => ({ editorTitle: s.editorTitle || `第 ${no} 章`, dirty: true, rightPanel: null }))
+          get().notify('AI 已生成章节，请检查后保存')
+        }
       } catch (error) {
+        set({ rightPanel: null })
         get().fail(`AI 写章失败：${errorMessage(error)}`)
       } finally {
-        set({ generating: null })
+        set({ generating: null, streamOpId: null, streamTarget: null, streamText: '', activeOpId: null })
       }
     })
   },
@@ -619,18 +672,28 @@ export const useStore = create<AppState>()((set, get) => ({
       get().fail('当前章节没有可润色的正文')
       return
     }
-    set({ generating: 'polish' })
+    const opId = newOpId()
+    set({
+      generating: 'polish',
+      streamOpId: opId, streamTarget: 'panel', streamText: '', activeOpId: opId,
+      rightPanel: { kind: 'result', title: 'AI 正在润色…', text: '' },
+    })
     await get().run(async () => {
       try {
-        const result = await call('agent:polish', { projectId, chapterNo, text: editorText, profileId: get().activeModelId ?? undefined })
-        const suggestions = splitPolishSuggestions(editorText, result.polished)
-        get().setEditorText(result.polished)
-        set({ polishPreview: { original: editorText, polished: result.polished, suggestions }, rightPanel: { kind: 'polish' } })
-        get().notify('润色完成，可在右侧逐条采纳')
+        const result = await call('agent:polish', { projectId, chapterNo, text: editorText, profileId: get().activeModelId ?? undefined, stream: true, opId })
+        if (result.aborted) {
+          set({ rightPanel: { kind: 'result', title: '已停止（润色未完成）', text: get().streamText || result.polished } })
+        } else {
+          const suggestions = splitPolishSuggestions(editorText, result.polished)
+          get().setEditorText(result.polished)
+          set({ polishPreview: { original: editorText, polished: result.polished, suggestions }, rightPanel: { kind: 'polish' } })
+          get().notify('润色完成，可在右侧逐条采纳')
+        }
       } catch (error) {
+        set({ rightPanel: null })
         get().fail(`一键润色失败：${errorMessage(error)}`)
       } finally {
-        set({ generating: null })
+        set({ generating: null, streamOpId: null, streamTarget: null, streamText: '', activeOpId: null })
       }
     })
   },
@@ -685,20 +748,35 @@ export const useStore = create<AppState>()((set, get) => ({
     }, '润色结果已保存（仅采纳的改动）')
   },
 
+  /** 应用聊天 AI 的写回 diff（整篇替换编辑器，保留撤销）。 */
+  applyDiff() {
+    const panel = get().rightPanel
+    if (!panel || panel.kind !== 'diff') return
+    get().setEditorText(panel.next)
+    set({ rightPanel: null })
+    get().notify('已应用 AI 修改，可撤销')
+  },
+
   async depolishAI() {
     const { editorText } = get()
     if (!editorText.trim()) {
       get().fail('当前没有可处理的正文')
       return
     }
-    set({ generating: 'depolish' })
+    const opId = newOpId()
+    set({ generating: 'depolish', streamOpId: opId, streamTarget: 'panel', streamText: '', activeOpId: opId, rightPanel: { kind: 'result', title: 'AI 正在去 AI 味…', text: '' } })
     await get().run(async () => {
       try {
-        const result = await call('agent:depolish', { text: editorText, profileId: get().activeModelId ?? undefined })
-        get().setEditorText(result.text)
-        get().notify('去 AI 味完成')
+        const result = await call('agent:depolish', { text: editorText, profileId: get().activeModelId ?? undefined, stream: true, opId })
+        if (result.aborted) {
+          set({ rightPanel: { kind: 'result', title: '已停止（保留部分内容）', text: get().streamText || result.text } })
+        } else {
+          get().setEditorText(result.text)
+          set({ rightPanel: null })
+          get().notify('去 AI 味完成')
+        }
       } finally {
-        set({ generating: null })
+        set({ generating: null, streamOpId: null, streamTarget: null, streamText: '', activeOpId: null })
       }
     })
   },
@@ -711,14 +789,20 @@ export const useStore = create<AppState>()((set, get) => ({
     }
     const styleId = await get().askSelect('选择文风', [{ value: '__skip__', label: '（取消）' }, ...STYLE_OPTIONS])
     if (!styleId || styleId === '__skip__') return
-    set({ generating: 'style' })
+    const opId = newOpId()
+    set({ generating: 'style', streamOpId: opId, streamTarget: 'panel', streamText: '', activeOpId: opId, rightPanel: { kind: 'result', title: 'AI 正在转换文风…', text: '' } })
     await get().run(async () => {
       try {
-        const result = await call('agent:styleConvert', { projectId, chapterNo, styleId, profileId: get().activeModelId ?? undefined })
-        get().setEditorText(result.revised)
-        get().notify('文风转换完成')
+        const result = await call('agent:styleConvert', { projectId, chapterNo, styleId, profileId: get().activeModelId ?? undefined, stream: true, opId })
+        if (result.aborted) {
+          set({ rightPanel: { kind: 'result', title: '已停止（保留部分内容）', text: get().streamText || result.revised } })
+        } else {
+          get().setEditorText(result.revised)
+          set({ rightPanel: null })
+          get().notify('文风转换完成')
+        }
       } finally {
-        set({ generating: null })
+        set({ generating: null, streamOpId: null, streamTarget: null, streamText: '', activeOpId: null })
       }
     })
   },
@@ -731,14 +815,20 @@ export const useStore = create<AppState>()((set, get) => ({
     }
     const mode = await get().askSelect('选择修订方式', REVISION_MODES.map((m) => ({ value: m.value, label: m.label })))
     if (!mode) return
-    set({ generating: 'revise' })
+    const opId = newOpId()
+    set({ generating: 'revise', streamOpId: opId, streamTarget: 'panel', streamText: '', activeOpId: opId, rightPanel: { kind: 'result', title: 'AI 正在修订…', text: '' } })
     await get().run(async () => {
       try {
-        const r = await call('agent:revise', { projectId, chapterNo, mode: mode as 'proofread' | 'rhythm' | 'style', profileId: get().activeModelId ?? undefined })
-        get().setEditorText(r.revised)
-        get().notify(`修订完成：${r.wordDelta >= 0 ? '+' : ''}${r.wordDelta} 字，改动 ${Math.round(r.changeRatio * 100)}%`)
+        const r = await call('agent:revise', { projectId, chapterNo, mode: mode as 'proofread' | 'rhythm' | 'style', profileId: get().activeModelId ?? undefined, stream: true, opId })
+        if (r.aborted) {
+          set({ rightPanel: { kind: 'result', title: '已停止（保留部分内容）', text: get().streamText || r.revised } })
+        } else {
+          get().setEditorText(r.revised)
+          set({ rightPanel: null })
+          get().notify(`修订完成：${r.wordDelta >= 0 ? '+' : ''}${r.wordDelta} 字，改动 ${Math.round(r.changeRatio * 100)}%`)
+        }
       } finally {
-        set({ generating: null })
+        set({ generating: null, streamOpId: null, streamTarget: null, streamText: '', activeOpId: null })
       }
     })
   },
@@ -747,14 +837,20 @@ export const useStore = create<AppState>()((set, get) => ({
     const { editorText } = get()
     const advice = await get().askPrompt('输入诊断建议', '', { placeholder: '如：加强主角动机，第二段节奏拖沓', multiline: true })
     if (!advice) return
-    set({ generating: 'advice' })
+    const opId = newOpId()
+    set({ generating: 'advice', streamOpId: opId, streamTarget: 'panel', streamText: '', activeOpId: opId, rightPanel: { kind: 'result', title: 'AI 正在应用建议…', text: '' } })
     await get().run(async () => {
       try {
-        const r = await call('agent:applyAdvice', { text: editorText, advice, profileId: get().activeModelId ?? undefined })
-        get().setEditorText(r.revised)
-        get().notify('建议已应用')
+        const r = await call('agent:applyAdvice', { text: editorText, advice, profileId: get().activeModelId ?? undefined, stream: true, opId })
+        if (r.aborted) {
+          set({ rightPanel: { kind: 'result', title: '已停止（保留部分内容）', text: get().streamText || r.revised } })
+        } else {
+          get().setEditorText(r.revised)
+          set({ rightPanel: null })
+          get().notify('建议已应用')
+        }
       } finally {
-        set({ generating: null })
+        set({ generating: null, streamOpId: null, streamTarget: null, streamText: '', activeOpId: null })
       }
     })
   },
@@ -828,9 +924,18 @@ export const useStore = create<AppState>()((set, get) => ({
     const genre = await get().askSelect('市场调研 · 选择题材', options)
     if (!genre) return
     const topic = await get().askPrompt('选题方向（可留空）', '', { placeholder: '如：规则怪谈 + 无限流' })
+    const opId = newOpId()
+    set({ streamOpId: opId, streamTarget: 'panel', streamText: '', activeOpId: opId, rightPanel: { kind: 'result', title: '市场调研生成中…', text: '' } })
     await get().run(async () => {
-      const result = await call('agent:marketResearch', { genre, topic: topic ?? undefined, profileId: get().activeModelId ?? undefined })
-      get().openRightPanel({ kind: 'result', title: `市场调研：${genre}`, text: result.report })
+      try {
+        const result = await call('agent:marketResearch', { genre, topic: topic ?? undefined, profileId: get().activeModelId ?? undefined, stream: true, opId })
+        set({ rightPanel: { kind: 'result', title: result.aborted ? '市场调研（已停止）' : `市场调研：${genre}`, text: result.aborted ? (get().streamText || result.report) : result.report } })
+      } catch (error) {
+        set({ rightPanel: null })
+        throw error
+      } finally {
+        set({ streamOpId: null, streamTarget: null, streamText: '', activeOpId: null })
+      }
     })
   },
 
@@ -1135,16 +1240,18 @@ export const useStore = create<AppState>()((set, get) => ({
       '',
       contextBlock,
     ].join('\n')
-    set({ chatMessages: history, chatInput: '', chatBusy: true })
+    const opId = newOpId()
+    set({ chatMessages: history, chatInput: '', chatBusy: true, streamOpId: opId, streamTarget: 'chat', streamText: '', activeOpId: opId })
     await get().run(async () => {
       try {
-        const result = await call('agent:complete', {
+        const result = await call('agent:chatStream', {
           profileId: activeModelId ?? undefined,
           messages: [
             { role: 'system', content: systemPrompt },
             ...history,
           ],
           maxTokens: 4000,
+          opId,
         })
         const applyStart = '【编辑框结果】'
         const applyEnd = '【结束】'
@@ -1156,19 +1263,37 @@ export const useStore = create<AppState>()((set, get) => ({
           applied = result.text.slice(startIdx + applyStart.length, endIdx).trim()
           const before = result.text.slice(0, startIdx).trim()
           const after = result.text.slice(endIdx + applyEnd.length).trim()
-          display = [before, after].filter(Boolean).join('\n') || '✓ 已更新编辑框正文'
+          display = [before, after].filter(Boolean).join('\n') || '我已按你的要求修改了正文，请在右侧确认后应用。'
         }
+        if (result.aborted) display += '\n\n（已停止生成）'
         if (applied !== null) {
-          get().setEditorText(applied)
-          get().notify('AI 已更新编辑框正文')
+          // 不直接覆盖编辑器，右栏给出 diff 预览，由用户确认应用
+          const currentText = get().editorText
+          set({ rightPanel: { kind: 'diff', original: currentText, next: applied } })
+          get().notify('AI 给出了修改建议，请在右侧确认应用')
         }
-        set({ chatMessages: [...history, { role: 'assistant', content: display }] })
+        set((s) => ({ chatMessages: [...history, { role: 'assistant', content: display }], streamOpId: null, streamTarget: null, streamText: '' }))
       } catch (error) {
-        set({ chatMessages: [...history, { role: 'assistant', content: `⚠ 出错了：${errorMessage(error)}` }] })
+        const partial = get().streamText
+        set((s) => ({
+          chatMessages: [...history, { role: 'assistant', content: partial.trim() ? `${partial}\n\n⚠ 已中断：${errorMessage(error)}` : `⚠ 出错了：${errorMessage(error)}` }],
+          streamOpId: null, streamTarget: null, streamText: '',
+        }))
       } finally {
-        set({ chatBusy: false })
+        set({ chatBusy: false, activeOpId: null })
       }
     })
+  },
+
+  applyStreamChunk(opId, delta) {
+    if (get().streamOpId !== opId) return
+    set((s) => ({ streamText: s.streamText + delta }))
+  },
+
+  async cancelActiveOp() {
+    const opId = get().activeOpId
+    if (!opId) return
+    await call('agent:abortStream', { opId }).catch(() => undefined)
   },
 
   // ── 阅读 / 字号 ──

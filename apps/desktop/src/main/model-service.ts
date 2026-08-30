@@ -15,6 +15,13 @@ export interface CompleteOptions {
   maxTokens?: number
 }
 
+export interface StreamResult {
+  text: string
+  model: string
+  provider: string
+  aborted: boolean
+}
+
 export interface ModelServiceDeps {
   loadSettings: () => Promise<Record<string, unknown>>
   saveSettings: (settings: Record<string, unknown>) => Promise<void>
@@ -26,6 +33,8 @@ function settingsProfiles(settings: Record<string, unknown>): ModelProfile[] {
 }
 
 export class ModelService {
+  private readonly streamControllers = new Map<string, AbortController>()
+
   constructor(private readonly deps: ModelServiceDeps) {}
 
   async list(): Promise<ModelProfile[]> {
@@ -66,6 +75,38 @@ export class ModelService {
       return await this.completeGoogle(profile, messages, options)
     }
     return await this.completeOpenAICompatible(profile, messages, options)
+  }
+
+  /** 中止进行中的流式请求。返回是否找到并中止了该 op。 */
+  abortStream(opId: string): boolean {
+    const controller = this.streamControllers.get(opId)
+    if (!controller) return false
+    controller.abort()
+    return true
+  }
+
+  /**
+   * 流式补全：增量经 onDelta 回调抛给调用方（由主进程转发渲染层）。
+   * 返回完整文本；用户中止时 aborted=true 且返回已累积的部分文本。
+   */
+  async streamComplete(opId: string, profileId: string | undefined, messages: ChatMessage[], options: CompleteOptions, onDelta: (delta: string) => void): Promise<StreamResult> {
+    const profile = await this.get(profileId)
+    if (!profile) throw new Error('未配置可用模型，请先在设置中添加模型服务')
+    if (!profile.apiKey) throw new Error(`模型「${profile.name}」缺少 API Key`)
+
+    const controller = new AbortController()
+    this.streamControllers.set(opId, controller)
+    try {
+      if (profile.provider === 'anthropic') {
+        return await this.streamAnthropic(profile, messages, options, controller.signal, onDelta)
+      }
+      if (profile.provider === 'google') {
+        return await this.streamGoogle(profile, messages, options, controller.signal, onDelta)
+      }
+      return await this.streamOpenAICompatible(profile, messages, options, controller.signal, onDelta)
+    } finally {
+      this.streamControllers.delete(opId)
+    }
   }
 
   async fetchModels(provider: ModelProfile['provider'], baseUrl?: string, apiKey?: string): Promise<{ models: string[]; error?: string }> {
@@ -204,5 +245,168 @@ export class ModelService {
     const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('')
     if (!text) throw new Error('Gemini 返回内容为空')
     return { text, model: profile.model, provider: profile.provider }
+  }
+
+  // ── 流式补全（SSE） ──
+
+  private isAbortError(error: unknown): boolean {
+    return error instanceof Error && (error.name === 'AbortError' || error.message.includes('abort'))
+  }
+
+  /** 解析 SSE 响应体，逐产出 data: 载荷行（自动处理分块截断）。 */
+  private async readSseData(response: Response, onPayload: (payload: string) => void): Promise<void> {
+    const body = response.body
+    if (!body) throw new Error('响应无内容流')
+    const reader = body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      let newlineIdx = buffer.indexOf('\n')
+      while (newlineIdx >= 0) {
+        const line = buffer.slice(0, newlineIdx).replace(/\r$/, '')
+        buffer = buffer.slice(newlineIdx + 1)
+        if (line.startsWith('data:')) onPayload(line.slice(5).trim())
+        newlineIdx = buffer.indexOf('\n')
+      }
+    }
+    const rest = buffer.trim()
+    if (rest.startsWith('data:')) onPayload(rest.slice(5).trim())
+  }
+
+  private async streamOpenAICompatible(profile: ModelProfile, messages: ChatMessage[], options: CompleteOptions, signal: AbortSignal, onDelta: (delta: string) => void): Promise<StreamResult> {
+    const base = this.baseUrl(profile) || 'https://api.openai.com/v1'
+    let text = ''
+    let aborted = false
+    try {
+      const response = await fetch(`${base}/chat/completions`, {
+        method: 'POST',
+        signal,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${profile.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: profile.model,
+          messages,
+          stream: true,
+          temperature: options.temperature ?? profile.temperature ?? 0.8,
+          max_tokens: options.maxTokens ?? profile.maxTokens ?? 4096,
+        }),
+      })
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '')
+        throw new Error(`模型请求失败 ${response.status}: ${errorText.slice(0, 300)}`)
+      }
+      await this.readSseData(response, (payload) => {
+        if (!payload || payload === '[DONE]') return
+        try {
+          const json = JSON.parse(payload) as { choices?: Array<{ delta?: { content?: string } }> }
+          const delta = json.choices?.[0]?.delta?.content
+          if (delta) {
+            text += delta
+            onDelta(delta)
+          }
+        } catch { // 忽略无法解析的心跳/注释行
+        }
+      })
+    } catch (error) {
+      if (!this.isAbortError(error)) throw error
+      aborted = true
+    }
+    return { text, model: profile.model, provider: profile.provider, aborted }
+  }
+
+  private async streamAnthropic(profile: ModelProfile, messages: ChatMessage[], options: CompleteOptions, signal: AbortSignal, onDelta: (delta: string) => void): Promise<StreamResult> {
+    const base = this.baseUrl(profile) || 'https://api.anthropic.com/v1'
+    const system = messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n')
+    const rest = messages.filter((m) => m.role !== 'system').map((m) => ({ role: m.role, content: m.content }))
+    let text = ''
+    let aborted = false
+    try {
+      const response = await fetch(`${base}/messages`, {
+        method: 'POST',
+        signal,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': profile.apiKey!,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: profile.model,
+          ...(system ? { system } : {}),
+          messages: rest,
+          stream: true,
+          temperature: options.temperature ?? profile.temperature ?? 0.8,
+          max_tokens: options.maxTokens ?? profile.maxTokens ?? 4096,
+        }),
+      })
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '')
+        throw new Error(`Anthropic 请求失败 ${response.status}: ${errorText.slice(0, 300)}`)
+      }
+      await this.readSseData(response, (payload) => {
+        if (!payload) return
+        try {
+          const json = JSON.parse(payload) as { type?: string; delta?: { text?: string } }
+          if (json.type === 'content_block_delta' && json.delta?.text) {
+            text += json.delta.text
+            onDelta(json.delta.text)
+          }
+        } catch { // 忽略无法解析的事件行
+        }
+      })
+    } catch (error) {
+      if (!this.isAbortError(error)) throw error
+      aborted = true
+    }
+    return { text, model: profile.model, provider: profile.provider, aborted }
+  }
+
+  private async streamGoogle(profile: ModelProfile, messages: ChatMessage[], options: CompleteOptions, signal: AbortSignal, onDelta: (delta: string) => void): Promise<StreamResult> {
+    const base = this.baseUrl(profile) || 'https://generativelanguage.googleapis.com/v1beta'
+    const contents = messages
+      .filter((m) => m.role !== 'system')
+      .map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }))
+    const system = messages.find((m) => m.role === 'system')?.content
+    let text = ''
+    let aborted = false
+    try {
+      const response = await fetch(`${base}/models/${profile.model}:streamGenerateContent?alt=sse`, {
+        method: 'POST',
+        signal,
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': profile.apiKey! },
+        body: JSON.stringify({
+          contents,
+          ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
+          generationConfig: {
+            temperature: options.temperature ?? profile.temperature ?? 0.8,
+            maxOutputTokens: options.maxTokens ?? profile.maxTokens ?? 4096,
+          },
+        }),
+      })
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '')
+        throw new Error(`Gemini 请求失败 ${response.status}: ${errorText.slice(0, 300)}`)
+      }
+      await this.readSseData(response, (payload) => {
+        if (!payload) return
+        try {
+          const json = JSON.parse(payload) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }
+          const delta = json.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? ''
+          if (delta) {
+            text += delta
+            onDelta(delta)
+          }
+        } catch { // 忽略无法解析的事件行
+        }
+      })
+    } catch (error) {
+      if (!this.isAbortError(error)) throw error
+      aborted = true
+    }
+    return { text, model: profile.model, provider: profile.provider, aborted }
   }
 }
