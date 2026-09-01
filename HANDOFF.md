@@ -28,17 +28,20 @@
 - **构建**：electron-vite + electron-builder + pnpm workspace（monorepo）
 - **语言**：TypeScript（NodeNext / Bundler 解析）
 - **测试**：Vitest（core 层 282 个测试）
-- **契约 IPC**：`packages/contracts` 定义 CommandMap，所有 Renderer→Main 调用走 preload 白名单 + 统一 Result 包装
+- **契约 IPC**：`packages/contracts` 定义 CommandMap（90+ 命令）与 EventMap（流式事件），所有 Renderer→Main 调用走 preload 白名单 + 统一 Result 包装
 - **目录结构**：
   ```
   novel-workshop-desktop/
   ├── packages/core/          # 纯业务逻辑（从插件迁移，零 Electron 依赖）
-  ├── packages/contracts/     # IPC 命令契约与类型
+  ├── packages/contracts/     # IPC 命令契约、事件契约与类型
   ├── packages/shared/        # 通用工具
   ├── apps/desktop/
-  │   ├── src/main/           # 主进程：窗口、IPC、模型、导出、同步、自动更新
-  │   ├── src/preload/        # 白名单桥
-  │   └── src/renderer/       # React 三栏 UI + 底部 AI 聊天栏
+  │   ├── src/main/           # 主进程：窗口、IPC dispatch、模型（含流式）、导出、同步、自动更新
+  │   ├── src/preload/        # 白名单桥（invoke + on(event) + 窗口控制）
+  │   └── src/renderer/       # React 工作台 UI：
+  │       ├── store.ts        #   zustand 全局状态与全部业务动作
+  │       ├── components/     #   TopBar / ActivityRail / EditorArea(EditorPane=CodeMirror 6) / ChatBar / RightPanel / Dialogs / 各弹窗
+  │       └── components/panels/  #   作品库 / 章节 / 世界书 / 创作流程 / 资料库 / 工具箱 六个侧栏面板
   ├── resources/              # 提示词模板、示例数据、品牌素材
   └── README.md / HANDOFF.md
   ```
@@ -54,16 +57,22 @@
 
 ### 4.2 聊天框即 AI 控制台
 - `sendChat()` 在每次发送时把**当前编辑框正文和章节标题**注入 system 上下文。
-- 约定写回协议：AI 若要求修改/生成正文，必须输出完整正文并包裹：
-  ```
-  【编辑框结果】
-  <完整正文>
-  【结束】
-  ```
-  前端解析标记后自动 `setEditorText` 写入编辑框，并计入撤销栈。
-- 普通聊天不写回编辑框。
+- 聊天与全部 AI 创作动作（写章/润色/去味/文风/修订/应用建议/市场调研）均为**流式输出**：
+  - 主进程 `ModelService.streamComplete` 解析 OpenAI 兼容 / Anthropic / Gemini 的 SSE；
+  - 增量经 `webContents.send('novel:event:stream', { opId, delta })` 推送，渲染层 `onStream` 订阅（contracts 的 `EventMap`）；
+  - 命令本身仍走 invoke 返回完整结果；`agent:chatStream` / `agent:abortStream` 负责聊天与中止（AbortController 注册表在 ModelService）。
+- 约定写回协议：AI 若要求修改/生成正文，输出完整正文并包裹 `【编辑框结果】…【结束】`。
+  前端解析标记后**不再直接覆盖编辑框**，而是在右栏生成句级 diff 预览（core `diffSentences`），用户点「应用到编辑器」才写入。
+- 普通聊天不写回编辑框；聊天助手消息用 react-markdown 渲染。
+- 写章会按书籍题材自动挂接 `resources/prompts/writing-chapter-*` 题材模板（`GENRE_TEMPLATE_MAP` 在 renderer store）。
 
-### 4.3 核心业务层
+### 4.3 编辑器与写作体验
+- 正文编辑器是 **CodeMirror 6**（`components/EditorPane.tsx`）：衬线正文、段首缩进 2em、居中 860px 栏宽、撤销/查找替换走 CM 内建能力；AI 写回用事务替换保留撤销历史。
+- **自动保存**：防抖（settings.autoSaveMs，默认 1.5s，0=关闭）+ Ctrl+S + 窗口失焦兜底；脏标记显示在保存按钮与标题旁圆点；切章/切书前 guardDirty 询问保存。
+- **主题**：light/dark/system 三态，CSS 变量双主题（styles.css `[data-theme="dark"]`），偏好经 settings:set 持久化；窗口背景色启动时按主题设置。
+- 应用设置中心（AppSettingsModal）：外观 / 自动保存 / 工作区目录 / WebDAV 同步 / 检查更新。
+
+### 4.4 核心业务层
 - `packages/core` 是从 DSH 插件迁移的纯逻辑，包含 novel/lorebook/polish/diagnose/consistency/revision/export/importer/prompts/guide/workflow/variables/stats 等域。
 - 保持 core 纯净：不要引入 Electron / cordis 依赖。
 
@@ -124,12 +133,13 @@ pnpm quick
 
 ## 8. 目前已知事项 / 可能的下一步
 
-- 已完成：聊天 AI 控制台、多模型切换、世界书完整面板、润色逐条采纳、高级工具箱、导出、云同步、自动更新、离线阅读（txt/md 内置，PDF/EPUB 调系统打开）、品牌 Logo、无边框窗口、白底黑字设计系统。
+- 已完成（v0.2.0 重构）：组件化渲染层（zustand + 面板架构）、章节树（选择/搜索/重命名/删除，`chapters:delete` 为新增 IPC）、CodeMirror 6 编辑器、自动保存、深色模式、AI 全链路流式输出、聊天 Markdown、写回 diff 确认、题材写作模板挂接、应用设置中心、WebDAV 同步界面、伏笔/术语/灵感/时间线/账本/素材库资料面板、九阶段流程面板、弹窗系统（下拉选择/确认/结果卡片）。
+- 新增依赖：zustand、codemirror 6（@codemirror/*）、react-markdown。
 - 可能的后续方向（未实现/可选）：
+  - 章节拖拽排序（需 core 新增 reorder + contracts 命令）
   - 应用内 PDF/EPUB 阅读器（当前调系统默认程序）
   - OSS 云同步（当前仅 WebDAV）
-  - 多语言 / 主题切换
-  - 更好的 AI 意图识别与工具调用（当前聊天通过标记协议写回编辑框）
+  - 多语言 / 更多主题
   - 移动端/跨平台（当前仅 Windows x64）
 
 ## 9. 给接手 Agent 的话
